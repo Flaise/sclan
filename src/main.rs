@@ -13,6 +13,7 @@ use tui::{
     Frame, Terminal,
 };
 use unicode_width::UnicodeWidthStr;
+use gethostname::gethostname;
 
 enum InputMode {
     Normal,
@@ -27,19 +28,23 @@ struct App {
     input_mode: InputMode,
     /// History of recorded messages
     messages: Vec<String>,
+    name: String,
 }
 
-impl Default for App {
-    fn default() -> App {
+impl App {
+    fn new(name: String) -> App {
         App {
             input: String::new(),
             input_mode: InputMode::Normal,
             messages: Vec::new(),
+            name,
         }
     }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let name = gethostname().into_string().map_err(|_| "Invalid unicode in host name.")?;
+
     // set up terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -47,8 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // create app and run it
-    let app = App::default();
+    let app = App::new(name);
     let res = run_app(&mut terminal, app);
 
     // restore terminal
@@ -112,13 +116,10 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
-        .constraints(
-            [
-                Constraint::Min(3),
-                Constraint::Length(3),
-            ]
-            .as_ref(),
-        )
+        .constraints([
+            Constraint::Min(3),
+            Constraint::Length(3),
+        ].as_ref())
         .split(f.size());
 
     let cell_input = chunks[1];
@@ -132,7 +133,19 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         .split(chunks[0]);
 
     let cell_messages = top_cells[0];
-    let cell_instructions = top_cells[1];
+    let cell_side = top_cells[1];
+
+    let side = Paragraph::new(vec![
+        Spans::from("computer name"),
+        Spans::from(Span::styled(
+            app.name.clone(),
+            Style::default().add_modifier(Modifier::BOLD)
+        )),
+        Spans::default(),//from("qwer"),
+        Spans::from("qwer"),
+    ]);
+    f.render_widget(side, cell_side);
+
 
     // let messages: Vec<ListItem> = app
     //     .messages
@@ -164,10 +177,10 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
                 Span::raw(" = send"),
             ],
     };
-    let text = Text::from(Spans::from(msg));
+    // let text = Text::from(Spans::from(msg));
     // text.patch_style(style);
-    let help_message = Paragraph::new(text);
-    f.render_widget(help_message, cell_instructions);
+    // let help_message = Paragraph::new(text);
+    // f.render_widget(help_message, cell_instructions);
 
     // let paragraph = Paragraph::new(text.clone())
     //     .style(Style::default().bg(Color::White).fg(Color::Black))
@@ -180,12 +193,10 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
             InputMode::Normal => Style::default(),
             InputMode::Editing => Style::default().fg(Color::Yellow).add_modifier(Modifier::RAPID_BLINK),
         })
-        .block(Block::default().borders(Borders::ALL).title(""));
+        .block(Block::default().borders(Borders::ALL).title(Spans::from(msg)));
     f.render_widget(input, cell_input);
     match app.input_mode {
-        InputMode::Normal =>
-            // Hide the cursor. `Frame` does this by default, so we don't need to do anything here
-            {}
+        InputMode::Normal => {}
 
         InputMode::Editing => {
             // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
@@ -208,84 +219,10 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         })
         .collect();
     let messages =
-        List::new(messages).block(Block::default().borders(Borders::ALL).title(""));
+        List::new(messages).block(Block::default().borders(Borders::ALL));
     f.render_widget(messages, cell_messages);
 }
 
-
-
-// use std::{io, thread, time::Duration};
-// use tui::{
-//     backend::CrosstermBackend,
-//     widgets::{Widget, Block, Borders},
-//     layout::{Layout, Constraint, Direction},
-//     Terminal
-// };
-// use crossterm::{
-//     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
-//     execute,
-//     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-// };
-
-// fn main() -> Result<(), io::Error> {
-//     // setup terminal
-//     enable_raw_mode()?;
-//     let mut stdout = io::stdout();
-//     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-//     let backend = CrosstermBackend::new(stdout);
-//     let mut terminal = Terminal::new(backend)?;
-
-//     terminal.draw(|f| {
-//         let size = f.size();
-//         let block = Block::default()
-//             .title("Block")
-//             .borders(Borders::ALL);
-//         f.render_widget(block, size);
-//     })?;
-
-//     thread::sleep(Duration::from_millis(5000));
-
-//     // restore terminal
-//     disable_raw_mode()?;
-//     execute!(
-//         terminal.backend_mut(),
-//         LeaveAlternateScreen,
-//         DisableMouseCapture
-//     )?;
-//     terminal.show_cursor()?;
-
-//     Ok(())
-// }
-
-
-// use std::io::{stdout, Write};
-
-// use crossterm::{
-//     execute,
-//     style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
-//     ExecutableCommand, Result,
-//     event,
-// };
-
-// fn main() -> Result<()> {
-//     // using the macro
-//     execute!(
-//         stdout(),
-//         SetForegroundColor(Color::Blue),
-//         SetBackgroundColor(Color::Red),
-//         Print("Styled text here."),
-//         ResetColor
-//     )?;
-
-//     // or using functions
-//     stdout()
-//         .execute(SetForegroundColor(Color::Blue))?
-//         .execute(SetBackgroundColor(Color::Red))?
-//         .execute(Print("Styled text here."))?
-//         .execute(ResetColor)?;
-    
-//     Ok(())
-// }
 
 // use std::net::{UdpSocket, SocketAddr};
 
