@@ -17,6 +17,7 @@ use unicode_width::UnicodeWidthStr;
 mod network;
 use network::{LANState, Peer};
 
+#[derive(Copy, Clone, PartialEq, Eq)]
 enum InputMode {
     Normal,
     Editing,
@@ -113,85 +114,135 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
     }
 }
 
-fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(1)
-        .constraints([
-            Constraint::Min(3),
-            Constraint::Length(3),
-        ].as_ref())
-        .split(f.size());
+fn scrolling_list(height: u32, selection: &str, options: Vec<String>) {
 
-    let cell_input = chunks[1];
+}
 
-    let top_cells = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Min(8),
-            Constraint::Length(16),
-        ].as_ref())
-        .split(chunks[0]);
-
-    let cell_messages = top_cells[0];
-    let cell_side = top_cells[1];
-
-    let mut side_rows = vec![
-        Spans::from("computer name:"),
-        Spans::from(Span::styled(
-            app.lan.local_name.clone(),
-            Style::default().add_modifier(Modifier::BOLD)
-        )),
-        Spans::default(),
-        // Spans::from("network:"),
-        Spans::from(Span::styled(
-            "network:",
-            Style::default().add_modifier(Modifier::UNDERLINED)
-        )),
-    ];
-
-    for peer in app.lan.peers.iter() {
-        side_rows.push(Spans::from(peer.name.clone()));
-    }
-    side_rows.push(Spans::default());
-    side_rows.push(Spans::from(vec![
-        Span::styled("[q]", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw("=quit "),
-    ]));
-
-    let side = Paragraph::new(side_rows);
-    f.render_widget(side, cell_side);
-
-    let msg = match app.input_mode {
+fn ui_instructions(input_mode: InputMode) -> Paragraph<'static> {
+    let lines = match input_mode {
         InputMode::Normal => 
             vec![
-                // Span::raw("Press "),
-                // Span::styled("[q]", Style::default().add_modifier(Modifier::BOLD)),
-                // Span::raw(" = exit . "),
-                Span::raw(" "),
-                Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw("=write "),
+                Spans::from(vec![
+                    Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw("-write "),
+                ]),
+                Spans::default(),
+                Spans::from(vec![
+                    Span::styled("    [q]", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw("-quit"),
+                ]),
             ],
         InputMode::Editing => 
             vec![
-                // Span::raw("Press "),
-                Span::raw(" "),
-                Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw("=send  "),
-                Span::styled("[Esc]", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw("=cancel "),
+                Spans::from(vec![
+                    Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw("-send"),
+                ]),
+                Spans::from(vec![
+                    Span::styled("  [Esc]", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw("-cancel"),
+                ]),
+                Spans::default(),
             ],
     };
-    // let text = Text::from(Spans::from(msg));
-    // text.patch_style(style);
-    // let help_message = Paragraph::new(text);
-    // f.render_widget(help_message, cell_instructions);
+    // lines.push(Spans::from(vec![
+    //     Span::styled("    [q]", Style::default().add_modifier(Modifier::BOLD)),
+    //     Span::raw("-quit"),
+    // ]));
 
     // let paragraph = Paragraph::new(text.clone())
     //     .style(Style::default().bg(Color::White).fg(Color::Black))
     //     .block(create_block("Left, no wrap"))
     //     .alignment(Alignment::Left);
     // .wrap(Wrap { trim: false })
+    Paragraph::new(lines)
+}
+
+fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
+    let horiz = Layout::default()
+        .direction(Direction::Horizontal)
+        .vertical_margin(1)
+        .constraints([
+            Constraint::Min(8),
+            Constraint::Length(16),
+        ].as_ref())
+        .split(f.size());
+
+    let side = Layout::default()
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(8),
+            Constraint::Length(3),
+        ])
+        .split(horiz[1]);
+
+    let cell_info = side[0];
+    let cell_peers = side[1];
+    let cell_instructions = side[2];
+
+    let vert = Layout::default()
+        .direction(Direction::Vertical)
+        .horizontal_margin(1)
+        .constraints([
+            Constraint::Min(3),
+            Constraint::Length(3),
+        ].as_ref())
+        .split(horiz[0]);
+
+    let cell_input = vert[1];
+    let cell_messages = vert[0];
+
+    // let mut side_rows = vec![
+    //     Spans::from("computer name:"),
+    //     Spans::from(Span::styled(
+    //         app.lan.local_name.clone(),
+    //         Style::default().add_modifier(Modifier::BOLD)
+    //     )),
+    //     Spans::default(),
+    //     // Spans::from("network:"),
+    //     Spans::from(Span::styled(
+    //         "network:",
+    //         Style::default().add_modifier(Modifier::UNDERLINED)
+    //     )),
+    // ];
+
+    // for peer in app.lan.peers.iter() {
+    //     side_rows.push(Spans::from(peer.name.clone()));
+    // }
+    // side_rows.push(Spans::default());
+    // side_rows.push(Spans::from(vec![
+    //     Span::styled("[q]", Style::default().add_modifier(Modifier::BOLD)),
+    //     Span::raw("=quit "),
+    // ]));
+
+    let info = Paragraph::new(vec![
+        Spans::from("computer name:"),
+        Spans::from(Span::styled(
+            app.lan.local_name.clone(),
+            Style::default().add_modifier(Modifier::BOLD)
+        )),
+        // Spans::default(),
+        // // Spans::from("network:"),
+        // Spans::from(Span::styled(
+        //     "network:",
+        //     Style::default().add_modifier(Modifier::UNDERLINED)
+        // )),
+    ]);
+    f.render_widget(info, cell_info);
+
+    let peers = Paragraph::new(vec![
+        Spans::from("network:"),
+
+    ]);
+    f.render_widget(peers, cell_peers);
+
+    // for peer in app.lan.peers.iter() {
+    //     side_rows.push(Spans::from(peer.name.clone()));
+    // }
+
+
+    f.render_widget(ui_instructions(app.input_mode), cell_instructions);
+
 
     let input = Paragraph::new(app.input.as_ref())
         .style(match app.input_mode {
@@ -199,7 +250,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
             InputMode::Editing => Style::default().fg(Color::Yellow),
             //.add_modifier(Modifier::RAPID_BLINK),
         })
-        .block(Block::default().borders(Borders::ALL).title(Spans::from(msg)));
+        .block(Block::default().borders(Borders::ALL));//.title(Spans::from(msg)));
     f.render_widget(input, cell_input);
     match app.input_mode {
         InputMode::Normal => {}
