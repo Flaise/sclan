@@ -8,7 +8,7 @@ use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
-    text::{Span, Spans, Text},
+    text::{Span, Spans},
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame, Terminal,
 };
@@ -136,13 +136,27 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     let cell_side = top_cells[1];
 
     let side = Paragraph::new(vec![
-        Spans::from("computer name"),
+        Spans::from("computer name:"),
         Spans::from(Span::styled(
             app.name.clone(),
             Style::default().add_modifier(Modifier::BOLD)
         )),
-        Spans::default(),//from("qwer"),
-        Spans::from("qwer"),
+        Spans::default(),
+        // Spans::from("network:"),
+        Spans::from(Span::styled(
+            "network:",
+            Style::default().add_modifier(Modifier::UNDERLINED)
+        )),
+        Spans::from("yeah"),
+        Spans::from("dude's comp"),
+        Spans::from("iFonne"),
+        Spans::from("other"),
+        Spans::default(),
+
+        Spans::from(vec![
+            Span::styled("[q]", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw("=quit "),
+        ]),
     ]);
     f.render_widget(side, cell_side);
 
@@ -163,18 +177,20 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         InputMode::Normal => 
             vec![
                 // Span::raw("Press "),
-                Span::styled("[q]", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(" = exit . "),
+                // Span::styled("[q]", Style::default().add_modifier(Modifier::BOLD)),
+                // Span::raw(" = exit . "),
+                Span::raw(" "),
                 Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(" = write"),
+                Span::raw("=write "),
             ],
         InputMode::Editing => 
             vec![
                 // Span::raw("Press "),
-                Span::styled("[Esc]", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(" = stop editing . "),
+                Span::raw(" "),
                 Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(" = send"),
+                Span::raw("=send  "),
+                Span::styled("[Esc]", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw("=cancel "),
             ],
     };
     // let text = Text::from(Spans::from(msg));
@@ -191,7 +207,8 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     let input = Paragraph::new(app.input.as_ref())
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
-            InputMode::Editing => Style::default().fg(Color::Yellow).add_modifier(Modifier::RAPID_BLINK),
+            InputMode::Editing => Style::default().fg(Color::Yellow),
+            //.add_modifier(Modifier::RAPID_BLINK),
         })
         .block(Block::default().borders(Borders::ALL).title(Spans::from(msg)));
     f.render_widget(input, cell_input);
