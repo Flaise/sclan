@@ -114,14 +114,45 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
     }
 }
 
-fn scrolling_list(height: u32, selection: &str, options: Vec<String>) {
+fn ui_scrolling_list(max_options: usize, title: &str, selection: &str, options: &[String])
+-> Paragraph<'static> {
 
+    let mut lines = vec![
+        Spans::from(title.to_string()),
+    ];
+
+    for (i, label) in options.iter().enumerate() {
+        if i >= max_options {
+            break;
+        }
+
+        // let mut span = Span::raw(label.clone());
+        let span = if label == selection {
+            // let label = format!("< {} >", label);
+            let label = label.clone();
+            Span::styled(label, Style::default().add_modifier(Modifier::REVERSED))
+        } else {
+            Span::raw(label.clone())
+        };
+        // lines.push(Spans::from(peer.clone()));
+        lines.push(Spans::from(span));
+    }
+
+    while lines.len() < max_options {
+        lines.push(Spans::default());
+    }
+
+    Paragraph::new(lines)
 }
 
 fn ui_instructions(input_mode: InputMode) -> Paragraph<'static> {
     let lines = match input_mode {
         InputMode::Normal => 
             vec![
+                Spans::from(vec![
+                    Span::styled("[Tab]", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw("-choose peer "),
+                ]),
                 Spans::from(vec![
                     Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
                     Span::raw("-write "),
@@ -134,6 +165,7 @@ fn ui_instructions(input_mode: InputMode) -> Paragraph<'static> {
             ],
         InputMode::Editing => 
             vec![
+                Spans::default(),
                 Spans::from(vec![
                     Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
                     Span::raw("-send"),
@@ -145,11 +177,6 @@ fn ui_instructions(input_mode: InputMode) -> Paragraph<'static> {
                 Spans::default(),
             ],
     };
-    // lines.push(Spans::from(vec![
-    //     Span::styled("    [q]", Style::default().add_modifier(Modifier::BOLD)),
-    //     Span::raw("-quit"),
-    // ]));
-
     // let paragraph = Paragraph::new(text.clone())
     //     .style(Style::default().bg(Color::White).fg(Color::Black))
     //     .block(create_block("Left, no wrap"))
@@ -159,12 +186,14 @@ fn ui_instructions(input_mode: InputMode) -> Paragraph<'static> {
 }
 
 fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
+    ////////////// layout
+
     let horiz = Layout::default()
         .direction(Direction::Horizontal)
         .vertical_margin(1)
         .constraints([
             Constraint::Min(8),
-            Constraint::Length(16),
+            Constraint::Length(18),
         ].as_ref())
         .split(f.size());
 
@@ -172,7 +201,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         .constraints([
             Constraint::Length(3),
             Constraint::Min(8),
-            Constraint::Length(3),
+            Constraint::Length(4),
         ])
         .split(horiz[1]);
 
@@ -192,28 +221,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     let cell_input = vert[1];
     let cell_messages = vert[0];
 
-    // let mut side_rows = vec![
-    //     Spans::from("computer name:"),
-    //     Spans::from(Span::styled(
-    //         app.lan.local_name.clone(),
-    //         Style::default().add_modifier(Modifier::BOLD)
-    //     )),
-    //     Spans::default(),
-    //     // Spans::from("network:"),
-    //     Spans::from(Span::styled(
-    //         "network:",
-    //         Style::default().add_modifier(Modifier::UNDERLINED)
-    //     )),
-    // ];
-
-    // for peer in app.lan.peers.iter() {
-    //     side_rows.push(Spans::from(peer.name.clone()));
-    // }
-    // side_rows.push(Spans::default());
-    // side_rows.push(Spans::from(vec![
-    //     Span::styled("[q]", Style::default().add_modifier(Modifier::BOLD)),
-    //     Span::raw("=quit "),
-    // ]));
+    /////////////// widgets
 
     let info = Paragraph::new(vec![
         Spans::from("computer name:"),
@@ -221,25 +229,17 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
             app.lan.local_name.clone(),
             Style::default().add_modifier(Modifier::BOLD)
         )),
-        // Spans::default(),
-        // // Spans::from("network:"),
-        // Spans::from(Span::styled(
-        //     "network:",
-        //     Style::default().add_modifier(Modifier::UNDERLINED)
-        // )),
     ]);
     f.render_widget(info, cell_info);
 
-    let peers = Paragraph::new(vec![
-        Spans::from("network:"),
-
-    ]);
-    f.render_widget(peers, cell_peers);
-
-    // for peer in app.lan.peers.iter() {
-    //     side_rows.push(Spans::from(peer.name.clone()));
-    // }
-
+    let options = vec![
+        "yeah".to_string(),
+        "a".to_string(),
+        "b".to_string(),
+        "rr".to_string(),
+        "qwerwas".to_string(),
+    ];
+    f.render_widget(ui_scrolling_list(4, "network:", "a", &options), cell_peers);
 
     f.render_widget(ui_instructions(app.input_mode), cell_instructions);
 
