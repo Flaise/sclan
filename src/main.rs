@@ -272,7 +272,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     f.render_widget(ui_info(app).alignment(Alignment::Right), cell_info);
 
     let options = app.lan.peers.iter().map(|peer| peer.name.clone()).collect::<Vec<_>>();
-    f.render_widget(ui_scrolling_list(8, "network:", &app.recipient.name, &options)
+    f.render_widget(ui_scrolling_list(10, "network:", &app.recipient.name, &options)
         .alignment(Alignment::Right), cell_peers);
 
     f.render_widget(ui_instructions(app.input_mode, app.recipient.valid), cell_instructions);

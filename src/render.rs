@@ -22,36 +22,36 @@ pub fn ui_scrolling_list(max_options: u16, title: &str, selection: &str, options
         Spans::from(title.to_string()),
     ];
 
-    for (i, label) in options.iter().enumerate() {
-        if i >= max_options as usize {
-            break;
-        }
-
-        let span = if label == selection {
-            // let label = label.clone();
-            let label = format!("→ {}", label);
-            Span::styled(label, Style::default().add_modifier(Modifier::REVERSED))
-        } else {
-            Span::raw(label.clone())
-        };
+    if let Some(index) = options.iter().position(|a| a == selection) {
+        let label = format!("→ {}", options[index]);
+        let span = Span::styled(label, Style::default().add_modifier(Modifier::REVERSED));
         lines.push(Spans::from(span));
+
+        for label in options.iter().skip(index + 1).take(max_options as usize - 1) {
+            lines.push(Spans::from(label.clone()));
+        }
+        if let Some(count) = (max_options as usize).checked_sub(lines.len() - 1) {
+            for label in options.iter().take(count) {
+                lines.push(Spans::from(label.clone()));
+            }
+        }
+    } else {
+        for label in options.iter().take(max_options as usize) {
+            lines.push(Spans::from(label.clone()));
+        }
     }
 
     if options.len() == 0 {
         lines.push(Spans::from(" (none) "));
-        //     Span::styled(" (none) ", Style::default().add_modifier(Modifier::ITALIC))
-        // ));
     }
 
     while lines.len() < max_options as usize {
         lines.push(Spans::default());
     }
 
-    if options.len() > max_options as usize {
-        // TODO
-        lines.push(ui_scrollbar(18, 11, 18));
-    } else {
-        lines.push(Spans::default());
+    match options.len().checked_sub(lines.len() - 1) {
+        Some(count) if count > 0 => lines.push(Spans::from(format!(" ({} more) …", count))),
+        _ => lines.push(Spans::default()),
     }
 
     Paragraph::new(lines)

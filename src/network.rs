@@ -21,6 +21,9 @@ pub fn network_update(state: &mut LANState) {
         state.peers.push(Peer {name: "b".into()});
         state.peers.push(Peer {name: "c".into()});
         state.peers.push(Peer {name: "rrr".into()});
+        state.peers.push(Peer {name: "eqweqw".into()});
+        state.peers.push(Peer {name: "LLEL".into()});
+        state.peers.push(Peer {name: "213456".into()});
     }
 }
 
