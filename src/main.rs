@@ -1,9 +1,10 @@
+use std::{error::Error, io};
+use std::mem::take;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{error::Error, io};
 use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout, Rect, Alignment},
@@ -130,7 +131,7 @@ fn input(app: &mut App) -> io::Result<()> {
             },
             InputMode::Editing => match key.code {
                 KeyCode::Enter => {
-                    app.messages.push(app.input.drain(..).collect());
+                    app.messages.push(take(&mut app.input));
                 }
                 KeyCode::Char(c) => {
                     app.input.push(c);

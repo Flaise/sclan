@@ -1,3 +1,4 @@
+use std::cmp::min;
 use tui::widgets::Paragraph;
 use tui::text::{Spans, Span};
 use tui::style::{Style, Modifier};
@@ -30,7 +31,7 @@ pub fn ui_scrolling_list(max_options: u16, title: &str, selection: &str, options
         for label in options.iter().skip(index + 1).take(max_options as usize - 1) {
             lines.push(Spans::from(label.clone()));
         }
-        if let Some(count) = (max_options as usize).checked_sub(lines.len() - 1) {
+        if let Some(count) = min(options.len(), max_options as usize).checked_sub(lines.len() - 1) {
             for label in options.iter().take(count) {
                 lines.push(Spans::from(label.clone()));
             }
