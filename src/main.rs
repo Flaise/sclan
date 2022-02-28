@@ -6,7 +6,7 @@ use crossterm::{
 use std::{error::Error, io};
 use tui::{
     backend::{Backend, CrosstermBackend},
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect, Alignment},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
     widgets::{Block, Borders, List, ListItem, Paragraph},
@@ -220,6 +220,16 @@ fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
     }
 }
 
+fn ui_info(app: &App) -> Paragraph<'static> {
+    Paragraph::new(vec![
+        Spans::from("computer name:"),
+        Spans::from(Span::styled(
+            app.lan.local_name.clone(),
+            Style::default().add_modifier(Modifier::BOLD)
+        )),
+    ])
+}
+
 fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     ////////////// layout
 
@@ -227,9 +237,9 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         .direction(Direction::Horizontal)
         .vertical_margin(1)
         .constraints([
-            Constraint::Min(8),
-            Constraint::Length(18),
             Constraint::Length(1),
+            Constraint::Length(18),
+            Constraint::Min(8),
         ].as_ref())
         .split(f.size());
 
@@ -252,24 +262,18 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
             Constraint::Min(3),
             Constraint::Length(3),
         ].as_ref())
-        .split(horiz[0]);
+        .split(horiz[2]);
 
     let cell_input = vert[1];
     let cell_messages = vert[0];
 
     /////////////// widgets
 
-    let info = Paragraph::new(vec![
-        Spans::from("computer name:"),
-        Spans::from(Span::styled(
-            app.lan.local_name.clone(),
-            Style::default().add_modifier(Modifier::BOLD)
-        )),
-    ]);
-    f.render_widget(info, cell_info);
+    f.render_widget(ui_info(app).alignment(Alignment::Right), cell_info);
 
     let options = app.lan.peers.iter().map(|peer| peer.name.clone()).collect::<Vec<_>>();
-    f.render_widget(ui_scrolling_list(8, "network:", &app.recipient.name, &options), cell_peers);
+    f.render_widget(ui_scrolling_list(8, "network:", &app.recipient.name, &options)
+        .alignment(Alignment::Right), cell_peers);
 
     f.render_widget(ui_instructions(app.input_mode, app.recipient.valid), cell_instructions);
 
