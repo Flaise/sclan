@@ -34,11 +34,23 @@ impl Default for InputMode {
 
 #[derive(Default)]
 struct App {
+    quitting: bool,
     input: String,
     input_mode: InputMode,
     messages: Vec<String>,
     lan: LANState,
-    recipient_name: String,
+    recipient: RecipientState,
+}
+
+#[derive(Default)]
+struct RecipientState {
+    /// For remembering which peer to go back to if it's added back to the list.
+    /// The length is 0 if no peer was selected.
+    name: String,
+    /// For remembering which peer to move onto if tabbing away from a missing peer.
+    index: usize,
+    /// False if the peer disappeared out of the list.
+    valid: bool,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -80,85 +92,109 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
 
         terminal.draw(|f| ui(f, &app))?;
 
-        if let Event::Key(key) = event::read()? {
-            match app.input_mode {
-                InputMode::Normal => match key.code {
-                    KeyCode::Enter => {
-                        app.input_mode = InputMode::Editing;
-                    }
-                    KeyCode::Char('q') => {
-                        return Ok(());
-                    }
-                    KeyCode::Tab => {
-                        
-                    }
-                    _ => {}
-                },
-                InputMode::Editing => match key.code {
-                    KeyCode::Enter => {
-                        app.messages.push(app.input.drain(..).collect());
-                    }
-                    KeyCode::Char(c) => {
-                        app.input.push(c);
-                    }
-                    KeyCode::Backspace => {
-                        app.input.pop();
-                    }
-                    KeyCode::Esc => {
-                        app.input_mode = InputMode::Normal;
-                    }
-                    _ => {}
-                },
-            }
+        input(&mut app)?;
+
+        if app.quitting {
+            return Ok(());
         }
     }
 }
 
-fn ui_instructions(input_mode: InputMode) -> Paragraph<'static> {
-    let lines = match input_mode {
-        InputMode::Normal => 
-            vec![
-                Spans::from(vec![
-                    Span::styled("  [Tab]", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw("-recipient"),
-                ]),
-                Spans::from(vec![
-                    Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw("-write"),
-                ]),
-                Spans::default(),
-                Spans::from(vec![
-                    Span::styled("    [q]", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw("-quit"),
-                ]),
-            ],
-        InputMode::Editing => 
-            vec![
-                Spans::default(),
-                Spans::from(vec![
-                    Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw("-send"),
-                ]),
-                Spans::from(vec![
-                    Span::styled("  [Esc]", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw("-cancel"),
-                ]),
-                Spans::default(),
-            ],
-    };
-    // let paragraph = Paragraph::new(text.clone())
-    //     .style(Style::default().bg(Color::White).fg(Color::Black))
-    //     .block(create_block("Left, no wrap"))
-    //     .alignment(Alignment::Left);
-    // .wrap(Wrap { trim: false })
+fn input(app: &mut App) -> io::Result<()> {
+    if let Event::Key(key) = event::read()? {
+        match app.input_mode {
+            InputMode::Normal => match key.code {
+                KeyCode::Enter => {
+                    if app.recipient.valid {
+                        app.input_mode = InputMode::Editing;
+                    }
+                }
+                KeyCode::Char('q') => {
+                    app.quitting = true;
+                }
+                KeyCode::Tab => {
+                    if app.lan.peers.len() > 0 {
+                        if app.recipient.name.len() == 0 {
+                            app.recipient.index = 0;
+                        } else {
+                            app.recipient.index += 1;
+                            if app.recipient.index >= app.lan.peers.len() {
+                                app.recipient.index = 0;
+                            }
+                        }
+                        app.recipient.name = app.lan.peers[app.recipient.index].name.clone();
+                        app.recipient.valid = true;
+                    }
+                }
+                _ => {}
+            },
+            InputMode::Editing => match key.code {
+                KeyCode::Enter => {
+                    app.messages.push(app.input.drain(..).collect());
+                }
+                KeyCode::Char(c) => {
+                    app.input.push(c);
+                }
+                KeyCode::Backspace => {
+                    app.input.pop();
+                }
+                KeyCode::Esc => {
+                    app.input_mode = InputMode::Normal;
+                }
+                _ => {}
+            },
+        }
+    }
+    Ok(())
+}
+
+fn ui_instructions(input_mode: InputMode, recipient_valid: bool) -> Paragraph<'static> {
+    let mut lines = vec![];
+    if input_mode == InputMode::Normal {
+        lines.push(Spans::from(vec![
+            Span::styled("  [Tab]", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw("-recipient"),
+        ]));
+    } else {
+        lines.push(Spans::default());
+    }
+    
+    if !recipient_valid {
+        lines.push(Spans::default());
+    } else if input_mode == InputMode::Normal {
+        lines.push(Spans::from(vec![
+            Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw("-write"),
+        ]));
+    } else {
+        lines.push(Spans::from(vec![
+            Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw("-send"),
+        ]));
+    }
+
+    if input_mode == InputMode::Normal {
+        lines.push(Spans::from(vec![
+            Span::styled("    [q]", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw("-quit"),
+        ]));
+    } else {
+        lines.push(Spans::from(vec![
+            Span::styled("  [Esc]", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw("-cancel"),
+        ]));
+    }
+
     Paragraph::new(lines)
 }
 
 fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
     let mut input_block = Block::default()
         .borders(Borders::ALL);
-    if app.input_mode == InputMode::Editing {
-        let send_to = Spans::from(format!(" sending to: {} ", app.recipient_name));
+    if !app.recipient.valid {
+        input_block = input_block.title(" Select a recipient. ");
+    } else if app.input_mode == InputMode::Editing {
+        let send_to = Spans::from(format!(" sending to: {} ", app.recipient.name));
         input_block = input_block.title(send_to);
     }
     let input = Paragraph::new(app.input.as_ref())
@@ -233,9 +269,9 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     f.render_widget(info, cell_info);
 
     let options = app.lan.peers.iter().map(|peer| peer.name.clone()).collect::<Vec<_>>();
-    f.render_widget(ui_scrolling_list(8, "network:", "a", &options), cell_peers);
+    f.render_widget(ui_scrolling_list(8, "network:", &app.recipient.name, &options), cell_peers);
 
-    f.render_widget(ui_instructions(app.input_mode), cell_instructions);
+    f.render_widget(ui_instructions(app.input_mode, app.recipient.valid), cell_instructions);
 
     render_input(f, app, cell_input);
 
