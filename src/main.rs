@@ -17,6 +17,9 @@ use unicode_width::UnicodeWidthStr;
 mod network;
 use network::{LANState, Peer};
 
+mod render;
+use render::ui_scrolling_list;
+
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum InputMode {
     Normal,
@@ -114,48 +117,17 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
     }
 }
 
-fn ui_scrolling_list(max_options: usize, title: &str, selection: &str, options: &[String])
--> Paragraph<'static> {
-
-    let mut lines = vec![
-        Spans::from(title.to_string()),
-    ];
-
-    for (i, label) in options.iter().enumerate() {
-        if i >= max_options {
-            break;
-        }
-
-        // let mut span = Span::raw(label.clone());
-        let span = if label == selection {
-            // let label = format!("< {} >", label);
-            let label = label.clone();
-            Span::styled(label, Style::default().add_modifier(Modifier::REVERSED))
-        } else {
-            Span::raw(label.clone())
-        };
-        // lines.push(Spans::from(peer.clone()));
-        lines.push(Spans::from(span));
-    }
-
-    while lines.len() < max_options {
-        lines.push(Spans::default());
-    }
-
-    Paragraph::new(lines)
-}
-
 fn ui_instructions(input_mode: InputMode) -> Paragraph<'static> {
     let lines = match input_mode {
         InputMode::Normal => 
             vec![
                 Spans::from(vec![
                     Span::styled("[Tab]", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw("-choose peer "),
+                    Span::raw("-recipient"),
                 ]),
                 Spans::from(vec![
                     Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw("-write "),
+                    Span::raw("-write"),
                 ]),
                 Spans::default(),
                 Spans::from(vec![
@@ -194,6 +166,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         .constraints([
             Constraint::Min(8),
             Constraint::Length(18),
+            Constraint::Length(1),
         ].as_ref())
         .split(f.size());
 
