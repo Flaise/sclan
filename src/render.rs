@@ -29,7 +29,7 @@ pub fn ui_scrolling_list(max_options: u16, title: &str, selection: &str, options
 
         let span = if label == selection {
             // let label = label.clone();
-            let label = format!("< {} >", label);
+            let label = format!("→ {}", label);
             Span::styled(label, Style::default().add_modifier(Modifier::REVERSED))
         } else {
             Span::raw(label.clone())
