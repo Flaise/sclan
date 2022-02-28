@@ -6,7 +6,7 @@ use crossterm::{
 use std::{error::Error, io};
 use tui::{
     backend::{Backend, CrosstermBackend},
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
     widgets::{Block, Borders, List, ListItem, Paragraph},
@@ -15,7 +15,7 @@ use tui::{
 use unicode_width::UnicodeWidthStr;
 
 mod network;
-use network::{LANState, Peer};
+use network::{LANState, network_update};
 
 mod render;
 use render::ui_scrolling_list;
@@ -26,22 +26,19 @@ enum InputMode {
     Editing,
 }
 
+impl Default for InputMode {
+    fn default() -> InputMode {
+        InputMode::Normal
+    }
+}
+
+#[derive(Default)]
 struct App {
     input: String,
     input_mode: InputMode,
     messages: Vec<String>,
     lan: LANState,
-}
-
-impl App {
-    fn new() -> App {
-        App {
-            input: String::new(),
-            input_mode: InputMode::Normal,
-            messages: Vec::new(),
-            lan: LANState::new(),
-        }
-    }
+    recipient_name: String,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -52,11 +49,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new();
-    app.lan.peers.push(Peer {name: "yeah".into()});
-    app.lan.peers.push(Peer {name: "a".into()});
-    app.lan.peers.push(Peer {name: "b".into()});
-    app.lan.peers.push(Peer {name: "c".into()});
+    let mut app = App::default();
+    network_update(&mut app.lan);
 
     let res = run_app(&mut terminal, app);
 
@@ -95,6 +89,9 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                     KeyCode::Char('q') => {
                         return Ok(());
                     }
+                    KeyCode::Tab => {
+                        
+                    }
                     _ => {}
                 },
                 InputMode::Editing => match key.code {
@@ -122,7 +119,7 @@ fn ui_instructions(input_mode: InputMode) -> Paragraph<'static> {
         InputMode::Normal => 
             vec![
                 Spans::from(vec![
-                    Span::styled("[Tab]", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled("  [Tab]", Style::default().add_modifier(Modifier::BOLD)),
                     Span::raw("-recipient"),
                 ]),
                 Spans::from(vec![
@@ -157,6 +154,36 @@ fn ui_instructions(input_mode: InputMode) -> Paragraph<'static> {
     Paragraph::new(lines)
 }
 
+fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
+    let mut input_block = Block::default()
+        .borders(Borders::ALL);
+    if app.input_mode == InputMode::Editing {
+        let send_to = Spans::from(format!(" sending to: {} ", app.recipient_name));
+        input_block = input_block.title(send_to);
+    }
+    let input = Paragraph::new(app.input.as_ref())
+        .style(match app.input_mode {
+            InputMode::Normal => Style::default(),
+            InputMode::Editing => Style::default().fg(Color::Yellow),
+        })
+        .block(input_block);
+
+    f.render_widget(input, cell_input);
+    match app.input_mode {
+        InputMode::Normal => {}
+
+        InputMode::Editing => {
+            // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
+            f.set_cursor(
+                // Put cursor past the end of the input text
+                cell_input.x + app.input.width() as u16 + 1,
+                // Move one line down, from the border to the input line
+                cell_input.y + 1,
+            )
+        }
+    }
+}
+
 fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     ////////////// layout
 
@@ -173,7 +200,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     let side = Layout::default()
         .constraints([
             Constraint::Length(3),
-            Constraint::Min(8),
+            Constraint::Min(10),
             Constraint::Length(4),
         ])
         .split(horiz[1]);
@@ -205,39 +232,12 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     ]);
     f.render_widget(info, cell_info);
 
-    let options = vec![
-        "yeah".to_string(),
-        "a".to_string(),
-        "b".to_string(),
-        "rr".to_string(),
-        "qwerwas".to_string(),
-    ];
-    f.render_widget(ui_scrolling_list(4, "network:", "a", &options), cell_peers);
+    let options = app.lan.peers.iter().map(|peer| peer.name.clone()).collect::<Vec<_>>();
+    f.render_widget(ui_scrolling_list(8, "network:", "a", &options), cell_peers);
 
     f.render_widget(ui_instructions(app.input_mode), cell_instructions);
 
-
-    let input = Paragraph::new(app.input.as_ref())
-        .style(match app.input_mode {
-            InputMode::Normal => Style::default(),
-            InputMode::Editing => Style::default().fg(Color::Yellow),
-            //.add_modifier(Modifier::RAPID_BLINK),
-        })
-        .block(Block::default().borders(Borders::ALL));//.title(Spans::from(msg)));
-    f.render_widget(input, cell_input);
-    match app.input_mode {
-        InputMode::Normal => {}
-
-        InputMode::Editing => {
-            // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
-            f.set_cursor(
-                // Put cursor past the end of the input text
-                cell_input.x + app.input.width() as u16 + 1,
-                // Move one line down, from the border to the input line
-                cell_input.y + 1,
-            )
-        }
-    }
+    render_input(f, app, cell_input);
 
     let messages: Vec<ListItem> = app
         .messages

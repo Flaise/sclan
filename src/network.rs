@@ -1,26 +1,27 @@
 use std::net::UdpSocket;
 use gethostname::gethostname;
 
+#[derive(Default)]
 pub struct LANState {
     socket: Option<UdpSocket>,
     pub peers: Vec<Peer>,
     pub local_name: String,
 }
 
-impl LANState {
-    pub fn new() -> LANState {
-        let name = gethostname().into_string().unwrap_or("???".into());
-
-        LANState {
-            socket: None,
-            peers: vec![],
-            local_name: name,
-        }
-    }
-}
-
 pub struct Peer {
     pub name: String,
+}
+
+pub fn network_update(state: &mut LANState) {
+    if state.local_name.len() == 0 {
+        state.local_name = gethostname().into_string().unwrap_or("???".into());
+
+        state.peers.push(Peer {name: "yeah".into()});
+        state.peers.push(Peer {name: "a".into()});
+        state.peers.push(Peer {name: "b".into()});
+        state.peers.push(Peer {name: "c".into()});
+        state.peers.push(Peer {name: "rrr".into()});
+    }
 }
 
 // pub fn ping()
