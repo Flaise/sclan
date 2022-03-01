@@ -1,7 +1,7 @@
 use std::{error::Error, io};
 use std::mem::take;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -14,6 +14,7 @@ use tui::{
     Frame, Terminal,
 };
 use unicode_width::UnicodeWidthStr;
+use clipboard::{ClipboardProvider, ClipboardContext};
 
 mod network;
 use network::{LANState, network_update};
@@ -83,7 +84,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()> {
+fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<(), Box<dyn Error>> {
     loop {
         if let InputMode::Normal = app.input_mode {
             // Partial fix for cursor still showing in Cygwin.
@@ -101,8 +102,40 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
     }
 }
 
-fn input(app: &mut App) -> io::Result<()> {
+fn paste(app: &mut App) -> Result<(), Box<dyn Error>> {
+    let mut ctx: ClipboardContext = ClipboardProvider::new()?;
+    let mut stuff = ctx.get_contents()?;
+    app.input.extend(stuff.drain(..));
+    Ok(())
+}
+
+//     ctx.set_contents(the_string.to_owned()).unwrap();
+
+fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
     if let Event::Key(key) = event::read()? {
+        match (key.code, key.modifiers) {
+            (KeyCode::Char('v'), KeyModifiers::ALT) => {
+                paste(app)?;
+                return Ok(());
+            },
+            (KeyCode::Tab, _) => {
+                if app.lan.peers.len() > 0 {
+                    if app.recipient.name.len() == 0 {
+                        app.recipient.index = 0;
+                    } else {
+                        app.recipient.index += 1;
+                        if app.recipient.index >= app.lan.peers.len() {
+                            app.recipient.index = 0;
+                        }
+                    }
+                    app.recipient.name = app.lan.peers[app.recipient.index].name.clone();
+                    app.recipient.valid = true;
+                }
+                return Ok(());
+            },
+            _ => {}
+        }
+
         match app.input_mode {
             InputMode::Normal => match key.code {
                 KeyCode::Enter => {
@@ -113,19 +146,8 @@ fn input(app: &mut App) -> io::Result<()> {
                 KeyCode::Char('q') => {
                     app.quitting = true;
                 }
-                KeyCode::Tab => {
-                    if app.lan.peers.len() > 0 {
-                        if app.recipient.name.len() == 0 {
-                            app.recipient.index = 0;
-                        } else {
-                            app.recipient.index += 1;
-                            if app.recipient.index >= app.lan.peers.len() {
-                                app.recipient.index = 0;
-                            }
-                        }
-                        app.recipient.name = app.lan.peers[app.recipient.index].name.clone();
-                        app.recipient.valid = true;
-                    }
+                KeyCode::Esc => {
+                    app.input.clear();
                 }
                 _ => {}
             },
@@ -149,41 +171,57 @@ fn input(app: &mut App) -> io::Result<()> {
     Ok(())
 }
 
-fn ui_instructions(input_mode: InputMode, recipient_valid: bool) -> Paragraph<'static> {
+fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
+                   text_entered: bool) -> Paragraph<'static> {
     let mut lines = vec![];
-    if input_mode == InputMode::Normal {
-        lines.push(Spans::from(vec![
-            Span::styled("  [Tab]", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw("-recipient"),
-        ]));
-    } else {
-        lines.push(Spans::default());
-    }
+
+    lines.push(Spans::from(vec![
+        Span::styled("   [Tab]", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("-recipient"),
+    ]));
     
     if !recipient_valid {
         lines.push(Spans::default());
     } else if input_mode == InputMode::Normal {
         lines.push(Spans::from(vec![
-            Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(" [Enter]", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw("-write"),
         ]));
     } else {
         lines.push(Spans::from(vec![
-            Span::styled("[Enter]", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(" [Enter]", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw("-send"),
         ]));
     }
 
     if input_mode == InputMode::Normal {
+        if text_entered {
+            lines.push(Spans::from(vec![
+                Span::styled("   [Esc]", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw("-clear"),
+            ]));
+        } else {
+            lines.push(Spans::default());
+        }
+    } else {
         lines.push(Spans::from(vec![
-            Span::styled("    [q]", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled("   [Esc]", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw("-cancel"),
+        ]));
+    }
+
+    lines.push(Spans::from(vec![
+        Span::styled(" [Alt+V]", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("-paste"),
+    ]));
+
+    if input_mode == InputMode::Normal {
+        lines.push(Spans::from(vec![
+            Span::styled("     [Q]", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw("-quit"),
         ]));
     } else {
-        lines.push(Spans::from(vec![
-            Span::styled("  [Esc]", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw("-cancel"),
-        ]));
+        lines.push(Spans::default());
     }
 
     Paragraph::new(lines)
@@ -248,7 +286,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         .constraints([
             Constraint::Length(3),
             Constraint::Min(10),
-            Constraint::Length(4),
+            Constraint::Length(5),
         ])
         .split(horiz[1]);
 
@@ -276,7 +314,8 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     f.render_widget(ui_scrolling_list(10, "network:", &app.recipient.name, &options)
         .alignment(Alignment::Right), cell_peers);
 
-    f.render_widget(ui_instructions(app.input_mode, app.recipient.valid), cell_instructions);
+    f.render_widget(ui_instructions(app.input_mode, app.recipient.valid, app.input.len() > 0),
+        cell_instructions);
 
     render_input(f, app, cell_input);
 
