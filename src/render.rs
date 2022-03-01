@@ -123,7 +123,13 @@ pub fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
         let send_to = Spans::from(format!(" sending to: {} ", app.recipient.name));
         input_block = input_block.title(send_to);
     }
-    let input = Paragraph::new(app.input.as_ref())
+
+    let line = app.input.split('\n').last().unwrap_or("");
+    let start = line.len().saturating_sub(cell_input.width as usize - 3);
+    let end = min(line.len(), start + cell_input.width as usize - 3);
+    let line = line.get(start..end).unwrap_or("<range error>");
+
+    let input = Paragraph::new(line)
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
             InputMode::Editing => Style::default().fg(Color::Yellow),
@@ -139,7 +145,7 @@ pub fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
             // coordinates after rendering
             f.set_cursor(
                 // Put cursor past the end of the input text
-                cell_input.x + app.input.width() as u16 + 1,
+                cell_input.x + line.width() as u16 + 1,
                 // Move one line down, from the border to the input line
                 cell_input.y + 1,
             )
