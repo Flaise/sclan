@@ -29,9 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::default();
-    network_update(&mut app.lan);
-
+    let app = App::default();
     let res = run_app(&mut terminal, app);
 
     // restore terminal
@@ -51,6 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<(), Box<dyn Error>> {
+    network_update(&mut app.lan);
     loop {
         if let InputMode::Normal = app.input_mode {
             // Partial fix for cursor still showing in Cygwin.
@@ -79,12 +78,11 @@ fn paste(app: &mut App) -> Result<(), Box<dyn Error>> {
 
 fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
     if let Event::Key(key) = event::read()? {
-        match (key.code, key.modifiers) {
-            (KeyCode::Char('v'), KeyModifiers::ALT) => {
+        match (app.input_mode, key.code, key.modifiers) {
+            (_, KeyCode::Char('v'), KeyModifiers::ALT) => {
                 paste(app)?;
-                return Ok(());
-            },
-            (KeyCode::Tab, KeyModifiers::SHIFT) => {
+            }
+            (_, KeyCode::Tab, KeyModifiers::SHIFT) => {
                 // NOTE: Shift+Tab doesn't work on the Windows Command Prompt
                 if app.lan.peers.len() > 0 {
                     if app.recipient.name.len() == 0 {
@@ -98,9 +96,8 @@ fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
                     app.recipient.name = app.lan.peers[app.recipient.index].name.clone();
                     app.recipient.valid = true;
                 }
-                return Ok(());
-            },
-            (KeyCode::Tab, KeyModifiers::NONE) => {
+            }
+            (_, KeyCode::Tab, KeyModifiers::NONE) => {
                 if app.lan.peers.len() > 0 {
                     if app.recipient.name.len() == 0 {
                         app.recipient.index = 0;
@@ -113,41 +110,33 @@ fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
                     app.recipient.name = app.lan.peers[app.recipient.index].name.clone();
                     app.recipient.valid = true;
                 }
-                return Ok(());
-            },
-            _ => {}
-        }
-
-        match app.input_mode {
-            InputMode::Normal => match key.code {
-                KeyCode::Enter => {
-                    if app.recipient.valid {
-                        app.input_mode = InputMode::Editing;
-                    }
+            }
+            (InputMode::Normal, KeyCode::Enter, _) => {
+                if app.recipient.valid {
+                    app.input_mode = InputMode::Editing;
                 }
-                KeyCode::Char('q') => {
-                    app.quitting = true;
-                }
-                KeyCode::Esc => {
-                    app.input.clear();
-                }
-                _ => {}
-            },
-            InputMode::Editing => match key.code {
-                KeyCode::Enter => {
+            }
+            (InputMode::Normal, KeyCode::Char('q'), _) => {
+                app.quitting = true;
+            }
+            (InputMode::Normal, KeyCode::Esc, _) => {
+                app.input.clear();
+            }
+            (InputMode::Editing, KeyCode::Enter, _) => {
+                if app.input.trim().len() > 0 {
                     app.messages.push(take(&mut app.input));
                 }
-                KeyCode::Char(c) => {
-                    app.input.push(c);
-                }
-                KeyCode::Backspace => {
-                    app.input.pop();
-                }
-                KeyCode::Esc => {
-                    app.input_mode = InputMode::Normal;
-                }
-                _ => {}
-            },
+            }
+            (InputMode::Editing, KeyCode::Char(c), _) => {
+                app.input.push(c);
+            }
+            (InputMode::Editing, KeyCode::Backspace, _) => {
+                app.input.pop();
+            }
+            (InputMode::Editing, KeyCode::Esc, _) => {
+                app.input_mode = InputMode::Normal;
+            }
+            _ => {}
         }
     }
     Ok(())

@@ -78,11 +78,13 @@ pub fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
             Span::styled(" [Enter]", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw("-write"),
         ]));
-    } else {
+    } else if text_entered {
         lines.push(Spans::from(vec![
             Span::styled(" [Enter]", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw("-send"),
         ]));
+    } else {
+        lines.push(Spans::default());
     }
 
     if input_mode == InputMode::Normal {
@@ -123,7 +125,7 @@ pub fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
         .borders(Borders::ALL);
     if !app.recipient.valid {
         input_block = input_block.title(" Select a recipient. ");
-    } else if app.input_mode == InputMode::Editing {
+    } else {
         let send_to = Spans::from(format!(" sending to: {} ", app.recipient.name));
         input_block = input_block.title(send_to);
     }
@@ -139,7 +141,8 @@ pub fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
         InputMode::Normal => {}
 
         InputMode::Editing => {
-            // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
+            // Make the cursor visible and ask tui-rs to put it at the specified
+            // coordinates after rendering
             f.set_cursor(
                 // Put cursor past the end of the input text
                 cell_input.x + app.input.width() as u16 + 1,
