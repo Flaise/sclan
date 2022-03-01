@@ -1,16 +1,5 @@
-use std::net::UdpSocket;
+use crate::data::{LANState, Peer};
 use gethostname::gethostname;
-
-#[derive(Default)]
-pub struct LANState {
-    socket: Option<UdpSocket>,
-    pub peers: Vec<Peer>,
-    pub local_name: String,
-}
-
-pub struct Peer {
-    pub name: String,
-}
 
 pub fn network_update(state: &mut LANState) {
     if state.local_name.len() == 0 {

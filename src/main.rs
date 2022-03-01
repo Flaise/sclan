@@ -7,53 +7,19 @@ use crossterm::{
 };
 use tui::{
     backend::{Backend, CrosstermBackend},
-    layout::{Constraint, Direction, Layout, Rect, Alignment},
-    style::{Color, Modifier, Style},
-    text::{Span, Spans},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    layout::{Constraint, Direction, Layout, Alignment},
     Frame, Terminal,
 };
-use unicode_width::UnicodeWidthStr;
 use clipboard::{ClipboardProvider, ClipboardContext};
 
+mod data;
+use data::{App, InputMode};
+
 mod network;
-use network::{LANState, network_update};
+use network::network_update;
 
 mod render;
-use render::ui_scrolling_list;
-
-#[derive(Copy, Clone, PartialEq, Eq)]
-enum InputMode {
-    Normal,
-    Editing,
-}
-
-impl Default for InputMode {
-    fn default() -> InputMode {
-        InputMode::Normal
-    }
-}
-
-#[derive(Default)]
-struct App {
-    quitting: bool,
-    input: String,
-    input_mode: InputMode,
-    messages: Vec<String>,
-    lan: LANState,
-    recipient: RecipientState,
-}
-
-#[derive(Default)]
-struct RecipientState {
-    /// For remembering which peer to go back to if it's added back to the list.
-    /// The length is 0 if no peer was selected.
-    name: String,
-    /// For remembering which peer to move onto if tabbing away from a missing peer.
-    index: usize,
-    /// False if the peer disappeared out of the list.
-    valid: bool,
-}
+use render::{ui_scrolling_list, render_input, ui_instructions, ui_info, ui_messages};
 
 fn main() -> Result<(), Box<dyn Error>> {
     // set up terminal
@@ -187,104 +153,6 @@ fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
-                   text_entered: bool) -> Paragraph<'static> {
-    let mut lines = vec![];
-
-    lines.push(Spans::from(vec![
-        Span::styled("   [Tab]", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw("-recipient"),
-    ]));
-    
-    if !recipient_valid {
-        lines.push(Spans::default());
-    } else if input_mode == InputMode::Normal {
-        lines.push(Spans::from(vec![
-            Span::styled(" [Enter]", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw("-write"),
-        ]));
-    } else {
-        lines.push(Spans::from(vec![
-            Span::styled(" [Enter]", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw("-send"),
-        ]));
-    }
-
-    if input_mode == InputMode::Normal {
-        if text_entered {
-            lines.push(Spans::from(vec![
-                Span::styled("   [Esc]", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw("-clear"),
-            ]));
-        } else {
-            lines.push(Spans::default());
-        }
-    } else {
-        lines.push(Spans::from(vec![
-            Span::styled("   [Esc]", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw("-cancel"),
-        ]));
-    }
-
-    lines.push(Spans::from(vec![
-        Span::styled(" [Alt+V]", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw("-paste"),
-    ]));
-
-    if input_mode == InputMode::Normal {
-        lines.push(Spans::from(vec![
-            Span::styled("     [Q]", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw("-quit"),
-        ]));
-    } else {
-        lines.push(Spans::default());
-    }
-
-    Paragraph::new(lines)
-}
-
-fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
-    let mut input_block = Block::default()
-        .borders(Borders::ALL);
-    if !app.recipient.valid {
-        input_block = input_block.title(" Select a recipient. ");
-    } else if app.input_mode == InputMode::Editing {
-        let send_to = Spans::from(format!(" sending to: {} ", app.recipient.name));
-        input_block = input_block.title(send_to);
-    }
-    let input = Paragraph::new(app.input.as_ref())
-        .style(match app.input_mode {
-            InputMode::Normal => Style::default(),
-            InputMode::Editing => Style::default().fg(Color::Yellow),
-        })
-        .block(input_block);
-
-    f.render_widget(input, cell_input);
-    match app.input_mode {
-        InputMode::Normal => {}
-
-        InputMode::Editing => {
-            // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
-            f.set_cursor(
-                // Put cursor past the end of the input text
-                cell_input.x + app.input.width() as u16 + 1,
-                // Move one line down, from the border to the input line
-                cell_input.y + 1,
-            )
-        }
-    }
-}
-
-fn ui_info(app: &App) -> Paragraph<'static> {
-    Paragraph::new(vec![
-        Spans::from("computer name:"),
-        Spans::from(Span::styled(
-            app.lan.local_name.clone(),
-            Style::default().add_modifier(Modifier::BOLD)
-        )),
-    ])
-}
-
 fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     ////////////// layout
 
@@ -335,16 +203,5 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
 
     render_input(f, app, cell_input);
 
-    let messages: Vec<ListItem> = app
-        .messages
-        .iter()
-        .enumerate()
-        .map(|(i, m)| {
-            let content = vec![Spans::from(Span::raw(format!("{}: {}", i, m)))];
-            ListItem::new(content)
-        })
-        .collect();
-    let messages =
-        List::new(messages).block(Block::default().borders(Borders::ALL));
-    f.render_widget(messages, cell_messages);
+    f.render_widget(ui_messages(app), cell_messages);
 }
