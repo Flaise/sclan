@@ -118,7 +118,23 @@ fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
                 paste(app)?;
                 return Ok(());
             },
-            (KeyCode::Tab, _) => {
+            (KeyCode::Tab, KeyModifiers::SHIFT) => {
+                // NOTE: Shift+Tab doesn't work on the Windows Command Prompt
+                if app.lan.peers.len() > 0 {
+                    if app.recipient.name.len() == 0 {
+                        app.recipient.index = app.lan.peers.len() - 1;
+                    } else {
+                        if app.recipient.index == 0 {
+                            app.recipient.index = app.lan.peers.len();
+                        }
+                        app.recipient.index -= 1;
+                    }
+                    app.recipient.name = app.lan.peers[app.recipient.index].name.clone();
+                    app.recipient.valid = true;
+                }
+                return Ok(());
+            },
+            (KeyCode::Tab, KeyModifiers::NONE) => {
                 if app.lan.peers.len() > 0 {
                     if app.recipient.name.len() == 0 {
                         app.recipient.index = 0;
