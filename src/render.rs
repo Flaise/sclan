@@ -1,11 +1,27 @@
+use std::borrow::Cow;
 use std::cmp::min;
-use tui::{backend::Backend, layout::{Rect}, Frame};
+use tui::{backend::Backend, layout::Rect, Frame};
 use tui::widgets::{Paragraph, List, ListItem, Block, Borders};
 use tui::text::{Spans, Span};
 use tui::style::{Style, Modifier, Color};
 use unicode_width::UnicodeWidthStr;
 use crate::App;
 use crate::data::InputMode;
+
+fn plain<'a, T>(message: T) -> Span<'a>
+where T: Into<Cow<'a, str>> {
+    Span::raw(message)
+}
+
+fn bold<'a, T>(message: T) -> Span<'a>
+where T: Into<Cow<'a, str>> {
+    Span::styled(message, Style::default().add_modifier(Modifier::BOLD))
+}
+
+fn reversed<'a, T>(message: T) -> Span<'a>
+where T: Into<Cow<'a, str>> {
+    Span::styled(message, Style::default().add_modifier(Modifier::REVERSED))
+}
 
 // fn ui_scrollbar(width: u16, position: u16, count: u16) -> Spans<'static> {
 //     let mut bar = vec![];
@@ -29,8 +45,7 @@ pub fn ui_scrolling_list(max_options: u16, title: &str, selection: &str, options
 
     if let Some(index) = options.iter().position(|a| a == selection) {
         let label = format!("→ {}", options[index]);
-        let span = Span::styled(label, Style::default().add_modifier(Modifier::REVERSED));
-        lines.push(Spans::from(span));
+        lines.push(Spans::from(reversed(label.clone())));
 
         for label in options.iter().skip(index + 1).take(max_options as usize - 1) {
             lines.push(Spans::from(label.clone()));
@@ -66,53 +81,32 @@ pub fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
                        text_entered: bool) -> Paragraph<'static> {
     let mut lines = vec![];
 
-    lines.push(Spans::from(vec![
-        Span::styled("   [Tab]", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw("-recipient"),
-    ]));
+    lines.push(Spans::from(vec![bold("   [Tab]"), plain("-recipient")]));
     
     if !recipient_valid {
         lines.push(Spans::default());
     } else if input_mode == InputMode::Normal {
-        lines.push(Spans::from(vec![
-            Span::styled(" [Enter]", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw("-write"),
-        ]));
+        lines.push(Spans::from(vec![bold(" [Enter]"), plain("-write")]));
     } else if text_entered {
-        lines.push(Spans::from(vec![
-            Span::styled(" [Enter]", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw("-send"),
-        ]));
+        lines.push(Spans::from(vec![bold(" [Enter]"), plain("-send")]));
     } else {
         lines.push(Spans::default());
     }
 
     if input_mode == InputMode::Normal {
         if text_entered {
-            lines.push(Spans::from(vec![
-                Span::styled("   [Esc]", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw("-clear"),
-            ]));
+            lines.push(Spans::from(vec![bold("   [Esc]"), plain("-clear")]));
         } else {
             lines.push(Spans::default());
         }
     } else {
-        lines.push(Spans::from(vec![
-            Span::styled("   [Esc]", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw("-cancel"),
-        ]));
+        lines.push(Spans::from(vec![bold("   [Esc]"), plain("-cancel")]));
     }
 
-    lines.push(Spans::from(vec![
-        Span::styled(" [Alt+V]", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw("-paste"),
-    ]));
+    lines.push(Spans::from(vec![bold(" [Alt+V]"), plain("-paste")]));
 
     if input_mode == InputMode::Normal {
-        lines.push(Spans::from(vec![
-            Span::styled("     [Q]", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw("-quit"),
-        ]));
+        lines.push(Spans::from(vec![bold("     [Q]"), plain("-quit")]));
     } else {
         lines.push(Spans::default());
     }
@@ -156,10 +150,7 @@ pub fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
 pub fn ui_info(app: &App) -> Paragraph<'static> {
     Paragraph::new(vec![
         Spans::from("computer name:"),
-        Spans::from(Span::styled(
-            app.lan.local_name.clone(),
-            Style::default().add_modifier(Modifier::BOLD)
-        )),
+        Spans::from(bold(app.lan.local_name.clone())),
     ])
 }
 
