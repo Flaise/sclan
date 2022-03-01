@@ -13,7 +13,7 @@ use tui::{
 use clipboard::{ClipboardProvider, ClipboardContext};
 
 mod data;
-use data::{App, InputMode};
+use data::{App, InputMode, sent, received};
 
 mod network;
 use network::network_update;
@@ -29,7 +29,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let app = App::default();
+    let mut app = App::default();
+
+    app.messages.push(sent("argv".into(),
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.".into()));
+    app.messages.push(received("argv".into(),
+        "Platea dictumst quisque sagittis purus.".into()));
+
     let res = run_app(&mut terminal, app);
 
     // restore terminal
@@ -84,6 +90,7 @@ fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
             }
             (_, KeyCode::Tab, KeyModifiers::SHIFT) => {
                 // NOTE: Shift+Tab doesn't work on the Windows Command Prompt
+                // https://stackoverflow.com/questions/6129143/how-to-map-shift-tab-in-vim-cygwin-windows-cmd-exe#6129580
                 if app.lan.peers.len() > 0 {
                     if app.recipient.name.len() == 0 {
                         app.recipient.index = app.lan.peers.len() - 1;
@@ -124,7 +131,11 @@ fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
             }
             (InputMode::Editing, KeyCode::Enter, _) => {
                 if app.input.trim().len() > 0 {
-                    app.messages.push(take(&mut app.input));
+                    let content = take(&mut app.input);
+                    app.messages.push(sent(app.recipient.name.clone(), content));
+                } else {
+                    app.input.clear();
+                    app.input_mode = InputMode::Normal;
                 }
             }
             (InputMode::Editing, KeyCode::Char(c), _) => {

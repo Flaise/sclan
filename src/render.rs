@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 use std::cmp::min;
 use tui::{backend::Backend, layout::Rect, Frame};
-use tui::widgets::{Paragraph, List, ListItem, Block, Borders};
+use tui::widgets::{Paragraph, Block, Borders, Wrap};
 use tui::text::{Spans, Span};
 use tui::style::{Style, Modifier, Color};
 use unicode_width::UnicodeWidthStr;
 use crate::App;
-use crate::data::InputMode;
+use crate::data::{InputMode, MessageDirection};
 
 fn plain<'a, T>(message: T) -> Span<'a>
 where T: Into<Cow<'a, str>> {
@@ -154,17 +154,41 @@ pub fn ui_info(app: &App) -> Paragraph<'static> {
     ])
 }
 
-pub fn ui_messages(app: &App) -> List {
-    let messages: Vec<ListItem> = app
-        .messages
-        .iter()
-        .enumerate()
-        .map(|(i, m)| {
-            let content = vec![Spans::from(Span::raw(format!("{}: {}", i, m)))];
-            ListItem::new(content)
-        })
-        .collect();
-    List::new(messages)
+pub fn ui_messages(app: &App) -> Paragraph<'static> {
+    let mut lines = vec![];
+    for message in app.messages.iter() {
+        let mut heading = vec![];
+        if message.direction == MessageDirection::Sent {
+            heading.push(bold("→"));
+            heading.push(plain(" to   "));
+        } else {
+            heading.push(bold("←"));
+            heading.push(plain(" from "));
+        }
+        // heading.push(bold(format!("{:.<16}", message.name)));
+
+        heading.push(bold(message.name.clone()));
+        for _ in message.name.len()..16 {
+            heading.push(plain("."));
+        }
+
+        heading.push(plain(format!(" {}", message.timestamp)));
+
+        let heading_style = if message.direction == MessageDirection::Sent {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::LightCyan)
+        };
+        for span in &mut heading {
+            span.style = heading_style;
+        }
+
+        lines.push(Spans::from(heading));
+
+        lines.push(Spans::from(plain(message.content.clone())));
+    }
+    Paragraph::new(lines)
         .block(Block::default()
         .borders(Borders::ALL))
+        .wrap(Wrap {trim: false})
 }
