@@ -1,10 +1,13 @@
 use std::borrow::Cow;
 use std::cmp::min;
 use tui::{backend::Backend, layout::Rect, Frame};
-use tui::widgets::{Paragraph, Block, Borders, Wrap};
+use tui::widgets::{Paragraph, Block, Borders};
 use tui::text::{Spans, Span};
 use tui::style::{Style, Modifier, Color};
 use unicode_width::UnicodeWidthStr;
+use textwrap::core::{Fragment, Word};
+use textwrap::wrap_algorithms::wrap_first_fit;
+use textwrap::WordSeparator::AsciiSpace;
 use crate::App;
 use crate::data::{InputMode, MessageDirection};
 
@@ -170,7 +173,28 @@ pub fn ui_info(app: &App) -> Paragraph<'static> {
     ])
 }
 
+#[derive(Debug)]
+struct SpanFragment<'a> {
+    word: Word<'a>,
+    style: Style,
+}
+
+impl Fragment for SpanFragment<'_> {
+    fn width(&self) -> f64 {
+        self.word.width()
+    }
+    fn whitespace_width(&self) -> f64 {
+        self.word.whitespace_width()
+    }
+    fn penalty_width(&self) -> f64 {
+        self.word.penalty_width()
+    }
+}
+
 pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
+    let view_width = area.width - 2;
+    let view_height = area.height - 2;
+
     let mut lines = vec![];
     for (i, message) in app.messages.iter().enumerate() {
         let mut heading = vec![];
@@ -209,13 +233,48 @@ pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
         lines.push(Spans::from(span));
     }
 
-    let view_y = area.height - 2;
+    let mut wrapped = vec![];
 
-    let prefer_y = view_y / 2;
+    for line in &mut lines {
 
-    let lowest = (lines.len() as u16).saturating_sub(1);//area.height);//view_y);
-    // let y = min(999, lowest);
-    let y = 15;
+        let mut fragments = vec![];
+
+        for span in &mut line.0 {
+            // The disadvantage of doing it this way is that spans with two different styles won't
+            // remain joined as one word at the wrap boundary. Not sure what the better way to do
+            // this would be.
+
+            for word in AsciiSpace.find_words(&span.content) {
+                fragments.push(SpanFragment {
+                    word,
+                    style: span.style,
+                });
+            }
+        }
+
+        let group = wrap_first_fit(&fragments, &[view_width as f64]);
+
+        for row in group.iter() {
+            wrapped.push(Spans::from(
+                row.iter().map(|fragment| {
+                    Span::styled(
+                        // fragment.word.word.to_owned(),//.clone(),
+                        format!("{}{}", fragment.word.word, fragment.word.whitespace),
+                        fragment.style
+                    )
+                }).collect::<Vec<Span>>()
+            ));
+        }
+    }
+
+    while wrapped.len() < view_height as usize {
+        wrapped.insert(0, Spans::default());
+    }
+
+    // let prefer_y = view_height / 2;
+
+    let lowest = (wrapped.len() as u16).saturating_sub(view_height);
+    let y = min(999, lowest);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -225,8 +284,7 @@ pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
             Style::default()
         });
 
-    Paragraph::new(lines)
+    Paragraph::new(wrapped)
         .block(block)
-        .wrap(Wrap {trim: false})
         .scroll((y, 0))
 }

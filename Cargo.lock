@@ -241,6 +241,7 @@ dependencies = [
  "clipboard",
  "crossterm",
  "gethostname",
+ "textwrap",
  "time",
  "tui",
  "unicode-width",
@@ -287,6 +288,15 @@ name = "smallvec"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
+
+[[package]]
+name = "textwrap"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1141d4d61095b28419e22cb0bbf02755f5e54e0526f97f1e3d1d160e60885fb"
+dependencies = [
+ "unicode-width",
+]
 
 [[package]]
 name = "time"
