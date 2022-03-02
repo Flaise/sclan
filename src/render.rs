@@ -209,18 +209,18 @@ pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
 
         heading.push(bold(message.name.clone()));
         for _ in message.name.len()..16 {
-            heading.push(plain("."));
+            heading.push(plain("_"));
         }
 
         heading.push(plain(format!(" {}", message.timestamp)));
 
-        let heading_style = if message.direction == MessageDirection::Sent {
-            Style::default().fg(Color::Yellow)
+        let heading_color = if message.direction == MessageDirection::Sent {
+            Color::Yellow
         } else {
-            Style::default().fg(Color::LightCyan)
+            Color::LightCyan
         };
         for span in &mut heading {
-            span.style = heading_style;
+            span.style = span.style.fg(heading_color);
         }
 
         lines.push(Spans::from(heading));
@@ -258,7 +258,6 @@ pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
             wrapped.push(Spans::from(
                 row.iter().map(|fragment| {
                     Span::styled(
-                        // fragment.word.word.to_owned(),//.clone(),
                         format!("{}{}", fragment.word.word, fragment.word.whitespace),
                         fragment.style
                     )
