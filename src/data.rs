@@ -20,6 +20,7 @@ pub struct App {
     pub input: String,
     pub input_mode: InputMode,
     pub messages: Vec<Message>,
+    pub message_highlight: Option<u16>,
     pub lan: LANState,
     pub recipient: RecipientState,
 }

@@ -145,6 +145,34 @@ fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
             (InputMode::Normal, KeyCode::Esc, _) => {
                 app.input.clear();
             }
+
+            (InputMode::Normal, KeyCode::Up, _) => {
+                if app.messages.len() > 0 {
+                    match app.message_highlight {
+                        None | Some(0) => {
+                            app.message_highlight = Some(app.messages.len() as u16 - 1);
+                        }
+                        Some(old) => app.message_highlight = Some(old - 1),
+                    }
+                }
+            }
+            (InputMode::Normal, KeyCode::Down, _) => {
+                if app.messages.len() > 0 {
+                    match app.message_highlight {
+                        None => {
+                            app.message_highlight = Some(0);
+                        }
+                        Some(old) => {
+                            if old == app.messages.len() as u16 - 1 {
+                                app.message_highlight = Some(0);
+                            } else {
+                                app.message_highlight = Some(old + 1);
+                            }
+                        }
+                    }
+                }
+            }
+
             (InputMode::Editing, KeyCode::Enter, _) => {
                 if app.input.trim().len() > 0 {
                     let content = take(&mut app.input);
@@ -214,10 +242,11 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     f.render_widget(ui_scrolling_list(10, "network:", &app.recipient.name, &options)
         .alignment(Alignment::Right), cell_peers);
 
-    f.render_widget(ui_instructions(app.input_mode, app.recipient.valid, app.input.len() > 0),
-        cell_instructions);
+    f.render_widget(ui_instructions(
+        app.input_mode, app.recipient.valid, app.input.len() > 0, app.messages.len() > 0
+    ), cell_instructions);
 
     render_input(f, app, cell_input);
 
-    f.render_widget(ui_messages(app), cell_messages);
+    f.render_widget(ui_messages(app, cell_messages), cell_messages);
 }

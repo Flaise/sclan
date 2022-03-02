@@ -78,8 +78,14 @@ pub fn ui_scrolling_list(max_options: u16, title: &str, selection: &str, options
 }
 
 pub fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
-                       text_entered: bool) -> Paragraph<'static> {
+                       text_entered: bool, output_displayed: bool) -> Paragraph<'static> {
     let mut lines = vec![];
+
+    if input_mode == InputMode::Normal && output_displayed {
+        lines.push(Spans::from(vec![bold(" [↑] [↓]"), plain("-message")]));
+    } else {
+        lines.push(Spans::default());
+    }
 
     lines.push(Spans::from(vec![bold("   [Tab]"), plain("-recipient")]));
     
@@ -160,9 +166,9 @@ pub fn ui_info(app: &App) -> Paragraph<'static> {
     ])
 }
 
-pub fn ui_messages(app: &App) -> Paragraph<'static> {
+pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
     let mut lines = vec![];
-    for message in app.messages.iter() {
+    for (i, message) in app.messages.iter().enumerate() {
         let mut heading = vec![];
         if message.direction == MessageDirection::Sent {
             heading.push(bold("→"));
@@ -191,10 +197,20 @@ pub fn ui_messages(app: &App) -> Paragraph<'static> {
 
         lines.push(Spans::from(heading));
 
-        lines.push(Spans::from(plain(message.content.clone())));
+        let span = if Some(i as u16) == app.message_highlight {
+            reversed(message.content.clone())
+        } else {
+            plain(message.content.clone())
+        };
+        lines.push(Spans::from(span));
     }
+
+    let lowest = (lines.len() as u16).saturating_sub(area.height + 2);
+    let y = min(22, lowest);
+
     Paragraph::new(lines)
         .block(Block::default()
         .borders(Borders::ALL))
         .wrap(Wrap {trim: false})
+        .scroll((y, 0))
 }
