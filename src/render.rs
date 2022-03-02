@@ -78,7 +78,8 @@ pub fn ui_scrolling_list(max_options: u16, title: &str, selection: &str, options
 }
 
 pub fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
-                       text_entered: bool, output_displayed: bool) -> Paragraph<'static> {
+                       text_entered: bool, output_displayed: bool,
+                       output_selected: bool) -> Paragraph<'static> {
     let mut lines = vec![];
 
     if input_mode == InputMode::Normal && output_displayed {
@@ -86,6 +87,7 @@ pub fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
     } else {
         lines.push(Spans::default());
     }
+    lines.push(Spans::default());
 
     lines.push(Spans::from(vec![bold("   [Tab]"), plain("-recipient")]));
     
@@ -100,7 +102,9 @@ pub fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
     }
 
     if input_mode == InputMode::Normal {
-        if text_entered {
+        if output_selected {
+            lines.push(Spans::from(vec![bold("   [Esc]"), plain("-deselect")]));
+        } else if text_entered {
             lines.push(Spans::from(vec![bold("   [Esc]"), plain("-clear")]));
         } else {
             lines.push(Spans::default());
@@ -208,9 +212,16 @@ pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
     let lowest = (lines.len() as u16).saturating_sub(area.height + 2);
     let y = min(22, lowest);
 
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(if app.message_highlight.is_some() {
+            Style::default().fg(Color::LightCyan)
+        } else {
+            Style::default()
+        });
+
     Paragraph::new(lines)
-        .block(Block::default()
-        .borders(Borders::ALL))
+        .block(block)
         .wrap(Wrap {trim: false})
         .scroll((y, 0))
 }

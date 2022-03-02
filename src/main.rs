@@ -137,13 +137,18 @@ fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
             (InputMode::Normal, KeyCode::Enter, _) => {
                 if app.recipient.valid {
                     app.input_mode = InputMode::Editing;
+                    app.message_highlight = None; // TODO: this should be an InputMode
                 }
             }
             (InputMode::Normal, KeyCode::Char('q'), _) => {
                 app.quitting = true;
             }
             (InputMode::Normal, KeyCode::Esc, _) => {
+                if app.message_highlight.is_some() {
+                    app.message_highlight = None;
+                } else {
                 app.input.clear();
+            }
             }
 
             (InputMode::Normal, KeyCode::Up, _) => {
@@ -214,7 +219,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         .constraints([
             Constraint::Length(3),
             Constraint::Min(10),
-            Constraint::Length(5),
+            Constraint::Length(7),
         ])
         .split(horiz[1]);
 
@@ -243,7 +248,8 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         .alignment(Alignment::Right), cell_peers);
 
     f.render_widget(ui_instructions(
-        app.input_mode, app.recipient.valid, app.input.len() > 0, app.messages.len() > 0
+        app.input_mode, app.recipient.valid, app.input.len() > 0, app.messages.len() > 0,
+        app.message_highlight.is_some()
     ), cell_instructions);
 
     render_input(f, app, cell_input);
