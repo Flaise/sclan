@@ -209,8 +209,13 @@ pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
         lines.push(Spans::from(span));
     }
 
-    let lowest = (lines.len() as u16).saturating_sub(area.height + 2);
-    let y = min(22, lowest);
+    let view_y = area.height - 2;
+
+    let prefer_y = view_y / 2;
+
+    let lowest = (lines.len() as u16).saturating_sub(1);//area.height);//view_y);
+    // let y = min(999, lowest);
+    let y = 15;
 
     let block = Block::default()
         .borders(Borders::ALL)
