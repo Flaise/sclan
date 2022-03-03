@@ -6,9 +6,6 @@ use tui::widgets::{Paragraph, Block, Borders};
 use tui::text::{Spans, Span};
 use tui::style::{Style, Modifier, Color};
 use unicode_width::UnicodeWidthStr;
-use textwrap::core::{Fragment, Word};
-use textwrap::wrap_algorithms::wrap_first_fit;
-use textwrap::WordSeparator::AsciiSpace;
 use textwrap::wrap;
 use crate::App;
 use crate::data::{InputMode, MessageDirection, Message};
@@ -174,25 +171,6 @@ pub fn ui_info(app: &App) -> Paragraph<'static> {
         Spans::from(bold(app.lan.local_name.clone())),
     ])
 }
-
-#[derive(Debug)]
-struct SpanFragment<'a> {
-    word: Word<'a>,
-    style: Style,
-}
-
-impl Fragment for SpanFragment<'_> {
-    fn width(&self) -> f64 {
-        self.word.width()
-    }
-    fn whitespace_width(&self) -> f64 {
-        self.word.whitespace_width()
-    }
-    fn penalty_width(&self) -> f64 {
-        self.word.penalty_width()
-    }
-}
-
 fn message_heading(message: &Message) -> Spans<'static> {
     let mut heading = vec![];
     if message.direction == MessageDirection::Sent {
@@ -221,36 +199,6 @@ fn message_heading(message: &Message) -> Spans<'static> {
     }
 
     Spans::from(heading)
-}
-
-fn wrap_line(line: &Spans, width: u16) -> Vec<Spans<'static>> {
-//impl Iterator<Item = Spans<'static>> {
-    let mut fragments = vec![];
-
-    for span in &line.0 {
-        // The disadvantage of doing it this way is that spans with two different styles won't
-        // remain joined as one word at the wrap boundary. Not sure what the better way to do
-        // this would be.
-
-        for word in AsciiSpace.find_words(&span.content) {
-            fragments.push(SpanFragment {
-                word,
-                style: span.style,
-            });
-        }
-    }
-
-    let group = wrap_first_fit(&fragments, &[width as f64]);
-    group.iter().map(|row| {
-        Spans::from(
-            row.iter().map(|fragment| {
-                Span::styled(
-                    format!("{}{}", fragment.word.word, fragment.word.whitespace),
-                    fragment.style
-                )
-            }).collect::<Vec<Span>>()
-        )
-    }).collect()
 }
 
 pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
