@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::min;
+use std::iter::Iterator;
 use tui::{backend::Backend, layout::Rect, Frame};
 use tui::widgets::{Paragraph, Block, Borders};
 use tui::text::{Spans, Span};
@@ -8,8 +9,9 @@ use unicode_width::UnicodeWidthStr;
 use textwrap::core::{Fragment, Word};
 use textwrap::wrap_algorithms::wrap_first_fit;
 use textwrap::WordSeparator::AsciiSpace;
+use textwrap::wrap;
 use crate::App;
-use crate::data::{InputMode, MessageDirection};
+use crate::data::{InputMode, MessageDirection, Message};
 
 fn plain<'a, T>(message: T) -> Span<'a>
 where T: Into<Cow<'a, str>> {
@@ -191,89 +193,93 @@ impl Fragment for SpanFragment<'_> {
     }
 }
 
+fn message_heading(message: &Message) -> Spans<'static> {
+    let mut heading = vec![];
+    if message.direction == MessageDirection::Sent {
+        heading.push(bold("→"));
+        heading.push(plain(" to   "));
+    } else {
+        heading.push(bold("←"));
+        heading.push(plain(" from "));
+    }
+    // heading.push(bold(format!("{:.<16}", message.name)));
+
+    heading.push(bold(message.name.clone()));
+    for _ in message.name.len()..16 {
+        heading.push(plain("_"));
+    }
+
+    heading.push(plain(format!(" {}", message.timestamp)));
+
+    let heading_color = if message.direction == MessageDirection::Sent {
+        Color::Yellow
+    } else {
+        Color::LightCyan
+    };
+    for span in &mut heading {
+        span.style = span.style.fg(heading_color);
+    }
+
+    Spans::from(heading)
+}
+
+fn wrap_line(line: &Spans, width: u16) -> Vec<Spans<'static>> {
+//impl Iterator<Item = Spans<'static>> {
+    let mut fragments = vec![];
+
+    for span in &line.0 {
+        // The disadvantage of doing it this way is that spans with two different styles won't
+        // remain joined as one word at the wrap boundary. Not sure what the better way to do
+        // this would be.
+
+        for word in AsciiSpace.find_words(&span.content) {
+            fragments.push(SpanFragment {
+                word,
+                style: span.style,
+            });
+        }
+    }
+
+    let group = wrap_first_fit(&fragments, &[width as f64]);
+    group.iter().map(|row| {
+        Spans::from(
+            row.iter().map(|fragment| {
+                Span::styled(
+                    format!("{}{}", fragment.word.word, fragment.word.whitespace),
+                    fragment.style
+                )
+            }).collect::<Vec<Span>>()
+        )
+    }).collect()
+}
+
 pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
     let view_width = area.width - 2;
     let view_height = area.height - 2;
 
-    let mut lines = vec![];
+    let mut lines: Vec<Spans<'static>> = vec![];
     for (i, message) in app.messages.iter().enumerate() {
-        let mut heading = vec![];
-        if message.direction == MessageDirection::Sent {
-            heading.push(bold("→"));
-            heading.push(plain(" to   "));
+        lines.push(message_heading(message.clone()));
+
+        let style = if Some(i as u16) == app.message_highlight {
+            Style::default().add_modifier(Modifier::REVERSED)
         } else {
-            heading.push(bold("←"));
-            heading.push(plain(" from "));
-        }
-        // heading.push(bold(format!("{:.<16}", message.name)));
-
-        heading.push(bold(message.name.clone()));
-        for _ in message.name.len()..16 {
-            heading.push(plain("_"));
-        }
-
-        heading.push(plain(format!(" {}", message.timestamp)));
-
-        let heading_color = if message.direction == MessageDirection::Sent {
-            Color::Yellow
-        } else {
-            Color::LightCyan
+            Style::default()
         };
-        for span in &mut heading {
-            span.style = span.style.fg(heading_color);
-        }
 
-        lines.push(Spans::from(heading));
-
-        let span = if Some(i as u16) == app.message_highlight {
-            reversed(message.content.clone())
-        } else {
-            plain(message.content.clone())
-        };
-        lines.push(Spans::from(span));
-    }
-
-    let mut wrapped = vec![];
-
-    for line in &mut lines {
-
-        let mut fragments = vec![];
-
-        for span in &mut line.0 {
-            // The disadvantage of doing it this way is that spans with two different styles won't
-            // remain joined as one word at the wrap boundary. Not sure what the better way to do
-            // this would be.
-
-            for word in AsciiSpace.find_words(&span.content) {
-                fragments.push(SpanFragment {
-                    word,
-                    style: span.style,
-                });
-            }
-        }
-
-        let group = wrap_first_fit(&fragments, &[view_width as f64]);
-
-        for row in group.iter() {
-            wrapped.push(Spans::from(
-                row.iter().map(|fragment| {
-                    Span::styled(
-                        format!("{}{}", fragment.word.word, fragment.word.whitespace),
-                        fragment.style
-                    )
-                }).collect::<Vec<Span>>()
-            ));
+        for r in wrap(&message.content, view_width as usize) {
+            lines.push(Spans::from(Span::styled(r.into_owned(), style)));
         }
     }
 
-    while wrapped.len() < view_height as usize {
-        wrapped.insert(0, Spans::default());
+    while lines.len() < view_height as usize {
+        lines.insert(0, Spans::default());
     }
 
     // let prefer_y = view_height / 2;
 
-    let lowest = (wrapped.len() as u16).saturating_sub(view_height);
-    let y = min(999, lowest);
+    let lowest = (lines.len() as u16).saturating_sub(view_height);
+    let y = lowest;//min(999, lowest);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -283,7 +289,7 @@ pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
             Style::default()
         });
 
-    Paragraph::new(wrapped)
+    Paragraph::new(lines)
         .block(block)
         .scroll((y, 0))
 }

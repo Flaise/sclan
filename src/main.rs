@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     app.messages.push(sent("argv".into(),
         "Convallis convallis tellus id interdum velit laoreet.".into()));
     app.messages.push(received("another computer".into(),
-        "Tellus mauris a diam maecenas sed. Ultricies tristique nulla aliquet enim tortor at auctor urna. Malesuada nunc vel risus commodo viverra maecenas.".into()));
+        "* Tellus mauris a diam maecenas sed.\n* Ultricies tristique nulla aliquet enim tortor at auctor urna.\n* Malesuada nunc vel risus commodo viverra maecenas.".into()));
     app.messages.push(received("none".into(),
         "Libero volutpat sed cras ornare arcu dui vivamus arcu felis.".into()));
     app.messages.push(sent("another computer".into(),
