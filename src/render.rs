@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::cmp::min;
+use std::cmp::{min, max};
 use std::iter::Iterator;
 use tui::{backend::Backend, layout::Rect, Frame};
 use tui::widgets::{Paragraph, Block, Borders};
@@ -38,8 +38,9 @@ where T: Into<Cow<'a, str>> {
 //     Spans::from(bar)
 // }
 
-pub fn ui_scrolling_list(max_options: u16, title: &str, selection: &str, options: &[String])
+pub fn ui_scrolling_list(area: Rect, title: &str, selection: &str, options: &[String])
 -> Paragraph<'static> {
+    let max_options = max(1, area.height.saturating_sub(2) as usize);
 
     let mut lines = vec![
         Spans::from(title.to_string()),
@@ -49,16 +50,16 @@ pub fn ui_scrolling_list(max_options: u16, title: &str, selection: &str, options
         let label = format!("→ {}", options[index]);
         lines.push(Spans::from(reversed(label.clone())));
 
-        for label in options.iter().skip(index + 1).take(max_options as usize - 1) {
+        for label in options.iter().skip(index + 1).take(max_options - 1) {
             lines.push(Spans::from(label.clone()));
         }
-        if let Some(count) = min(options.len(), max_options as usize).checked_sub(lines.len() - 1) {
+        if let Some(count) = min(options.len(), max_options).checked_sub(lines.len() - 1) {
             for label in options.iter().take(count) {
                 lines.push(Spans::from(label.clone()));
             }
         }
     } else {
-        for label in options.iter().take(max_options as usize) {
+        for label in options.iter().take(max_options) {
             lines.push(Spans::from(label.clone()));
         }
     }
@@ -67,7 +68,7 @@ pub fn ui_scrolling_list(max_options: u16, title: &str, selection: &str, options
         lines.push(Spans::from(" (none) "));
     }
 
-    while lines.len() < max_options as usize {
+    while lines.len() < max_options {
         lines.push(Spans::default());
     }
 
@@ -83,6 +84,8 @@ pub fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
                        text_entered: bool, output_displayed: bool,
                        output_selected: bool) -> Paragraph<'static> {
     let mut lines = vec![];
+
+    lines.push(Spans::from("__________________"));
 
     if input_mode == InputMode::Normal && output_displayed {
         lines.push(Spans::from(vec![bold(" [↑] [↓]"), plain("-message")]));

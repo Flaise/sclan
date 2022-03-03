@@ -232,7 +232,7 @@ fn calc_layout(base: Rect) -> Cells {
         .constraints([
             Constraint::Length(3),
             Constraint::Min(3),
-            Constraint::Length(7),
+            Constraint::Length(8),
         ])
         .split(horiz[1]);
 
@@ -262,11 +262,11 @@ fn ui<B: Backend>(frame: &mut Frame<B>, app: &App) {
     frame.render_widget(ui_info(app).alignment(Alignment::Right), cell_info);
 
     let options = app.lan.peers.iter().map(|peer| peer.name.clone()).collect::<Vec<_>>();
-    frame.render_widget(ui_scrolling_list(10, "network:", &app.recipient.name, &options)
+    frame.render_widget(ui_scrolling_list(cell_peers, "network:", &app.recipient.name, &options)
         .alignment(Alignment::Right), cell_peers);
 
     frame.render_widget(ui_instructions(
-        app.input_mode, app.recipient.valid, app.input.len() > 0, app.messages.len() > 0,
+        app.input_mode, app.recipient.valid, app.input.trim().len() > 0, app.messages.len() > 0,
         app.message_highlight.is_some()
     ), cell_instructions);
 
