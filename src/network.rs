@@ -1,5 +1,10 @@
-use crate::data::{LANState, Peer};
+use std::net::UdpSocket;
+use std::time::{Duration, Instant};
+use std::io::{ErrorKind, Result as IOResult};
 use gethostname::gethostname;
+use crate::data::{LANState, Peer};
+
+const PORT: u16 = 31331;
 
 pub fn network_update(state: &mut LANState) {
     if state.local_name.len() == 0 {
@@ -14,63 +19,60 @@ pub fn network_update(state: &mut LANState) {
         state.peers.push(Peer {name: "LLEL".into()});
         state.peers.push(Peer {name: "213456".into()});
     }
+
+    bind(state);
+    ping(state);
 }
 
-// pub fn ping()
+fn check_interval(state: &mut LANState, interval: Duration) -> bool {
+    let now = Instant::now();
+    state.last_ping.map(|last| now.duration_since(last) >= interval).unwrap_or(true)
+}
 
-// use std::net::{UdpSocket, SocketAddr};
+fn bind(state: &mut LANState) {
+    if state.socket.is_none() {
+        if !check_interval(state, Duration::from_millis(5000)) {
+            return;
+        }
 
-// const PORT: u16 = 62634;
+        match UdpSocket::bind(("0.0.0.0", PORT)) {
+            Err(error) => {
+                if error.kind() == ErrorKind::AddrInUse {
+                }
+                todo!("display error");
+            }
+            Ok(socket) => {
+                socket.set_broadcast(true).unwrap();
+                socket.set_read_timeout(Some(Duration::from_millis(50))).unwrap();
 
-// fn main() {
-// let socket = UdpSocket::bind("0.0.0.0:8477")?;
+                state.socket = Some(socket);
+            }
+        }
+    }
+}
 
-// let send_result = socket.send_to(&message, "255.255.255.255:8477");
-//             if let Err(error) = send_result {
-//                 once! {
-//                     handle(domain, &mut EventError::from_err(error, "sync"));
-//                 }
+fn send_ping(socket: &UdpSocket) -> IOResult<()> {
+    socket.send_to(&[3], ("255.255.255.255", PORT))?;
+    Ok(())
+}
 
-// }
+fn ping(state: &mut LANState) {
+    if state.socket.is_none() {
+        return;
+    }
+    if !check_interval(state, Duration::from_millis(2000)) {
+        return;
+    }
 
-// //         if error.kind() == ErrorKind::AddrInUse {
-// //             if event.attempts == 4 {
-// //                 warn!("4 attempts and broadcast socket still in use");
-// //             }
-// //         } else {
-// //             once! {
-// //                 warn!("broadcast socket: {}", error);
-// //             }
-// //         }
-// // fn try_init_broadcast(domain: &mut Domain) -> IoResult<()> {
-// //     let socket = UdpSocket::bind("0.0.0.0:8477")?;
-// //     socket.set_broadcast(true)?;
-
-// //     // Timeout is workaround for these issues:
-// //     // https://github.com/rust-lang/rfcs/issues/957
-// //     // https://github.com/rust-lang/rust/issues/23272
-// //     // ^ Can't use shutdown signal to interrupt reading thread.
-// //     socket.set_read_timeout(Some(BROADCAST_INTERVAL))?;
-// //     let socket_b = socket.try_clone()?;
-
-// //     info!("Broadcast ready.");
-
-// //     let mut proceed = ProceedSubject::new();
-// //     let observer = proceed.make_observer();
-
-// //     let trigger = make_entity(domain);
-// //     let id_key = generate_id_key();
-// //     set_data(domain, BroadcastData {
-// //         id_key: id_key.clone(),
-// //         trigger,
-// //         socket: Some(socket_b),
-// //         _proceed: proceed,
-// //     });
-// //     init_timer_imprecise(domain, trigger, BROADCAST_INTERVAL);
-// //     init_uhandler(domain, handle_timer);
-
-// //     let to_domain = remote_signaller_of(domain);
-// //     let source = SourceBroadcast::new(socket, id_key);
-// //     let source = source_proceeds(source, observer);
-// //     let source = show_source_error(source);
-// //     thread_read_signals(to_domain, source, "broadcast".into()).map(|_join_handle| ())
+    if let Some(ref socket) = state.socket {
+        if let Err(error) = send_ping(socket) {
+            match error.kind() {
+                ErrorKind::TimedOut | ErrorKind::WouldBlock => {}
+                _ => {
+                    todo!("display error");
+                    state.socket = None;
+                }
+            }
+        }
+    }
+}

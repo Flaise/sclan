@@ -1,10 +1,11 @@
 use std::borrow::Cow;
 use std::cmp::{min, max};
 use std::iter::Iterator;
-use tui::{backend::Backend, layout::Rect, Frame};
+use tui::{backend::Backend, Frame};
 use tui::widgets::{Paragraph, Block, Borders};
 use tui::text::{Spans, Span};
 use tui::style::{Style, Modifier, Color};
+use tui::layout::{Alignment, Rect};
 use unicode_width::UnicodeWidthStr;
 use textwrap::wrap;
 use crate::App;
@@ -252,4 +253,13 @@ pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
     Paragraph::new(lines)
         .block(block)
         .scroll((y, 0))
+}
+
+pub fn ui_status(app: &App) -> Paragraph<'static> {
+    Paragraph::new(vec![
+        Span::styled(
+            "status",
+            Style::default().fg(Color::Gray).bg(Color::Red)
+        ).into()
+    ]).alignment(Alignment::Right)
 }

@@ -1,4 +1,5 @@
 use std::net::UdpSocket;
+use std::time::Instant;
 use time::macros::format_description;
 use time::OffsetDateTime;
 
@@ -23,6 +24,8 @@ pub struct App {
     pub message_highlight: Option<u16>,
     pub lan: LANState,
     pub recipient: RecipientState,
+    pub needs_redraw: bool,
+    pub status: String,
 }
 
 #[derive(Default)]
@@ -41,6 +44,7 @@ pub struct LANState {
     pub socket: Option<UdpSocket>,
     pub peers: Vec<Peer>,
     pub local_name: String,
+    pub last_ping: Option<Instant>,
 }
 
 pub struct Peer {
