@@ -171,6 +171,7 @@ pub fn ui_info(app: &App) -> Paragraph<'static> {
         Spans::from(bold(app.lan.local_name.clone())),
     ])
 }
+
 fn message_heading(message: &Message) -> Spans<'static> {
     let mut heading = vec![];
     if message.direction == MessageDirection::Sent {
@@ -205,18 +206,20 @@ pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
     let view_width = area.width - 2;
     let view_height = area.height - 2;
 
+    let mut focus_y = None;
+
     let mut lines: Vec<Spans<'static>> = vec![];
     for (i, message) in app.messages.iter().enumerate() {
+        let mut body_style = Style::default();
+        if Some(i as u16) == app.message_highlight {
+            body_style = body_style.add_modifier(Modifier::REVERSED);
+
+            focus_y = Some(lines.len() as u16);
+        }
+
         lines.push(message_heading(message.clone()));
-
-        let style = if Some(i as u16) == app.message_highlight {
-            Style::default().add_modifier(Modifier::REVERSED)
-        } else {
-            Style::default()
-        };
-
         for r in wrap(&message.content, view_width as usize) {
-            lines.push(Spans::from(Span::styled(r.into_owned(), style)));
+            lines.push(Spans::from(Span::styled(r.into_owned(), body_style)));
         }
     }
 
@@ -224,10 +227,12 @@ pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
         lines.insert(0, Spans::default());
     }
 
-    // let prefer_y = view_height / 2;
-
     let lowest = (lines.len() as u16).saturating_sub(view_height);
-    let y = lowest;//min(999, lowest);
+    let y = if let Some(r) = focus_y {
+        min(r.saturating_sub((view_height / 2).saturating_sub(1)), lowest)
+    } else {
+        lowest
+    };
 
     let block = Block::default()
         .borders(Borders::ALL)
