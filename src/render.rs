@@ -89,7 +89,13 @@ pub fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
     } else {
         lines.push(Spans::default());
     }
-    lines.push(Spans::default());
+    if output_selected {
+        lines.push(Spans::from(vec![bold(" [Alt+C]"), plain("-copy")]));
+    } else {
+        lines.push(Spans::default());
+    }
+
+    lines.push(Spans::from(vec![bold(" [Alt+V]"), plain("-paste")]));
 
     lines.push(Spans::from(vec![bold("   [Tab]"), plain("-recipient")]));
     
@@ -114,8 +120,6 @@ pub fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
     } else {
         lines.push(Spans::from(vec![bold("   [Esc]"), plain("-cancel")]));
     }
-
-    lines.push(Spans::from(vec![bold(" [Alt+V]"), plain("-paste")]));
 
     if input_mode == InputMode::Normal {
         lines.push(Spans::from(vec![bold("     [Q]"), plain("-quit")]));

@@ -96,11 +96,21 @@ fn paste(app: &mut App) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-//     ctx.set_contents(the_string.to_owned()).unwrap();
+fn copy(app: &mut App) -> Result<(), Box<dyn Error>> {
+    if let Some(index) = app.message_highlight {
+        let content = app.messages[index as usize].content.clone();
+        let mut ctx: ClipboardContext = ClipboardProvider::new()?;
+        ctx.set_contents(content)?;
+    }
+    Ok(())
+}
 
 fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
     if let Event::Key(key) = event::read()? {
         match (app.input_mode, key.code, key.modifiers) {
+            (InputMode::Normal, KeyCode::Char('c'), KeyModifiers::ALT) => {
+                copy(app)?;
+            }
             (_, KeyCode::Char('v'), KeyModifiers::ALT) => {
                 paste(app)?;
             }
@@ -154,9 +164,6 @@ fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
             (InputMode::Normal, KeyCode::Up, _) => {
                 if app.messages.len() > 0 {
                     match app.message_highlight {
-                        // None | Some(0) => {
-                        //     app.message_highlight = Some(app.messages.len() as u16 - 1);
-                        // }
                         None => app.message_highlight = Some(app.messages.len() as u16 - 1),
                         Some(0) => {}
                         Some(old) => app.message_highlight = Some(old - 1),
@@ -166,19 +173,7 @@ fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
             (InputMode::Normal, KeyCode::Down, _) => {
                 if app.messages.len() > 0 {
                     match app.message_highlight {
-                        // None => {
-                        //     app.message_highlight = Some(0);
-                        // }
-                        // Some(old) => {
-                        //     if old == app.messages.len() as u16 - 1 {
-                        //         app.message_highlight = Some(0);
-                        //     } else {
-                        //         app.message_highlight = Some(old + 1);
-                        //     }
-                        // }
-
                         None => app.message_highlight = Some(app.messages.len() as u16 - 1),
-                        // Some(0) => {}
                         Some(old) => {
                             if old < app.messages.len() as u16 - 1 {
                                 app.message_highlight = Some(old + 1);
@@ -187,14 +182,6 @@ fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
-            // (InputMode::Normal, KeyCode::PageUp, _) => {
-
-            // }
-            // (InputMode::Normal, k @ KeyCode::PageUp | k @ KeyCode::PageDown, _) => {
-            //     // if app.messages.len() > 0 {
-            //     //     app.message_highlight.unwrap_or(app.messages.len() - 1)
-            //     // }
-            // }
 
             (InputMode::Editing, KeyCode::Enter, _) => {
                 if app.input.trim().len() > 0 {
@@ -205,8 +192,10 @@ fn input(app: &mut App) -> Result<(), Box<dyn Error>> {
                     app.input_mode = InputMode::Normal;
                 }
             }
-            (InputMode::Editing, KeyCode::Char(c), _) => {
-                app.input.push(c);
+            (InputMode::Editing, KeyCode::Char(c), k) => {
+                if !k.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) {
+                    app.input.push(c);
+                }
             }
             (InputMode::Editing, KeyCode::Backspace, _) => {
                 app.input.pop();
@@ -242,7 +231,7 @@ fn calc_layout(base: Rect) -> Cells {
     let side = Layout::default()
         .constraints([
             Constraint::Length(3),
-            Constraint::Min(10),
+            Constraint::Min(3),
             Constraint::Length(7),
         ])
         .split(horiz[1]);
