@@ -28,6 +28,12 @@ pub struct App {
     pub status: String,
 }
 
+pub fn set_status(app: &mut App, message: impl AsRef<str>) {
+    app.status.clear();
+    app.status.push_str(message.as_ref());
+    app.needs_redraw = true;
+}
+
 #[derive(Default)]
 pub struct RecipientState {
     /// For remembering which peer to go back to if it's added back to the list.

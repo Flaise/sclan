@@ -255,10 +255,10 @@ pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
         .scroll((y, 0))
 }
 
-pub fn ui_status(app: &App) -> Paragraph<'static> {
+pub fn ui_status<'a>(app: &'a App) -> Paragraph<'a> {
     Paragraph::new(vec![
         Span::styled(
-            "status",
+            &app.status,
             Style::default().fg(Color::Gray).bg(Color::Red)
         ).into()
     ]).alignment(Alignment::Right)

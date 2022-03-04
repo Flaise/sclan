@@ -75,7 +75,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<(), B
     app.needs_redraw = true;
 
     loop {
-        network_update(&mut app.lan);
+        network_update(&mut app);
 
         if app.needs_redraw {
             app.needs_redraw = false;
