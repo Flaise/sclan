@@ -37,23 +37,22 @@ pub fn set_status(app: &mut App, message: impl AsRef<str>) {
 }
 
 pub struct RecipientState {
-    /// For remembering which peer to go back to if it's added back to the list.
-    /// The length is 0 if no peer was selected.
-    pub name: String,
+    /// False if the peer disappeared out of the list or no peer was selected.
+    pub valid: bool,
     /// For remembering which peer to move onto if tabbing away from a missing peer.
     pub index: usize,
-    /// False if the peer disappeared out of the list.
-    pub valid: bool,
-    pub address: IpAddr,
+    pub peer: Peer,
 }
 
 impl Default for RecipientState {
     fn default() -> Self {
         RecipientState {
-            name: Default::default(),
-            index: 0,
             valid: false,
-            address: [0, 0, 0, 0].into(),
+            index: 0,
+            peer: Peer {
+                name: Default::default(),
+                address: [0, 0, 0, 0].into(),
+            },
         }
     }
 }
@@ -67,6 +66,7 @@ pub struct LANState {
     pub last_ping: Option<Instant>,
 }
 
+#[derive(Clone)]
 pub struct Peer {
     pub name: String,
     pub address: IpAddr,

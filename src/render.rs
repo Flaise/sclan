@@ -66,7 +66,7 @@ pub fn ui_scrolling_list(area: Rect, title: &str, selection: &str, options: &[St
     }
 
     if options.len() == 0 {
-        lines.push(Spans::from(" (none) "));
+        lines.push(Spans::from(" (searching...) "));
     }
 
     while lines.len() < max_options {
@@ -141,7 +141,7 @@ pub fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
         input_block = input_block.title(" Select a recipient. ");
     } else {
         let send_to = Spans::from(format!(" sending to: {} - {} ",
-            app.recipient.name, app.recipient.address));
+            app.recipient.peer.name, app.recipient.peer.address.to_string()));
         input_block = input_block.title(send_to);
     }
 
@@ -194,7 +194,7 @@ fn message_heading(message: &Message) -> Spans<'static> {
     }
 
     heading.push(bold(message.name.clone()));
-    
+
     let len = 16usize.saturating_sub(message.name.len());
     heading.push(plain(format!("{:_<len$} {}", "", message.timestamp, len=len)));
 
@@ -256,10 +256,11 @@ pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
 }
 
 pub fn ui_status<'a>(app: &'a App) -> Paragraph<'a> {
-    Paragraph::new(vec![
+    Paragraph::new(Spans::from(vec![
         Span::styled(
             &app.status,
             Style::default().fg(Color::Gray).bg(Color::Red)
-        ).into()
-    ]).alignment(Alignment::Right)
+        ).into(),
+        plain(" "),
+    ])).alignment(Alignment::Right)
 }

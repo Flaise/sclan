@@ -32,8 +32,6 @@ fn local_ip() -> Option<IpAddr> {
 }
 
 fn update_local_ip(app: &mut App) {
-
-    // app.lan.local_addr = format!("{:?}", socket.local_addr().unwrap().ip());
     app.lan.local_addr = local_ip()
         .map(|a| a.to_string())
         .unwrap_or("???".to_string());
@@ -119,6 +117,7 @@ fn ping(app: &mut App) {
                 let ip = source.ip();
                 if let Some(peer) = app.lan.peers.iter_mut().find(|a| a.address == ip) {
                     // update name
+                    // peer.name = 
                 } else {
                     app.lan.peers.push(Peer {
                         // name: "???".into(),
@@ -130,9 +129,7 @@ fn ping(app: &mut App) {
             }
             Err(error) => {
                 match error.kind() {
-                    ErrorKind::TimedOut | ErrorKind::WouldBlock => {
-                        set_status(app, "recv timeout");
-                    }
+                    ErrorKind::TimedOut | ErrorKind::WouldBlock => {}
                     _ => {
                         set_status(app, format!("recv error: {:?}", error));
                         disconnect(app);

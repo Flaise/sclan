@@ -135,7 +135,7 @@ fn input(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Error>> {
             // NOTE: Shift+Tab doesn't work on the Windows Command Prompt
             // https://stackoverflow.com/questions/6129143/how-to-map-shift-tab-in-vim-cygwin-windows-cmd-exe#6129580
             if app.lan.peers.len() > 0 {
-                if app.recipient.name.len() == 0 {
+                if !app.recipient.valid {
                     app.recipient.index = app.lan.peers.len() - 1;
                 } else {
                     if app.recipient.index == 0 {
@@ -143,13 +143,13 @@ fn input(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Error>> {
                     }
                     app.recipient.index -= 1;
                 }
-                app.recipient.name = app.lan.peers[app.recipient.index].name.clone();
+                app.recipient.peer = app.lan.peers[app.recipient.index].clone();
                 app.recipient.valid = true;
             }
         }
         (_, KeyCode::Tab, KeyModifiers::NONE) => {
             if app.lan.peers.len() > 0 {
-                if app.recipient.name.len() == 0 {
+                if !app.recipient.valid {
                     app.recipient.index = 0;
                 } else {
                     app.recipient.index += 1;
@@ -157,7 +157,7 @@ fn input(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Error>> {
                         app.recipient.index = 0;
                     }
                 }
-                app.recipient.name = app.lan.peers[app.recipient.index].name.clone();
+                app.recipient.peer = app.lan.peers[app.recipient.index].clone();
                 app.recipient.valid = true;
             }
         }
@@ -203,7 +203,7 @@ fn input(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Error>> {
         (InputMode::Editing, KeyCode::Enter, _) => {
             if app.input.trim().len() > 0 {
                 let content = take(&mut app.input);
-                app.messages.push(sent(app.recipient.name.clone(), content));
+                app.messages.push(sent(app.recipient.peer.name.clone(), content));
             } else {
                 app.input.clear();
                 app.input_mode = InputMode::Normal;
@@ -285,8 +285,9 @@ fn ui<B: Backend>(frame: &mut Frame<B>, app: &App) {
     frame.render_widget(ui_info(app).alignment(Alignment::Right), cell_info);
 
     let options = app.lan.peers.iter().map(|peer| peer.name.clone()).collect::<Vec<_>>();
-    frame.render_widget(ui_scrolling_list(cell_peers, "network:", &app.recipient.name, &options)
-        .alignment(Alignment::Right), cell_peers);
+    frame.render_widget(ui_scrolling_list(
+        cell_peers, "network:", &app.recipient.peer.name, &options
+    ).alignment(Alignment::Right), cell_peers);
 
     frame.render_widget(ui_instructions(
         app.input_mode, app.recipient.valid, app.input.trim().len() > 0, app.messages.len() > 0,
