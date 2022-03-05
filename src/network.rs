@@ -1,6 +1,8 @@
 use std::net::{UdpSocket, IpAddr};
+use std::cmp::min;
 use std::time::{Duration, Instant};
 use std::io::{ErrorKind, Result as IOResult};
+use std::str::from_utf8;
 use gethostname::gethostname;
 use crate::data::{LANState, Peer, set_status, App};
 
@@ -54,34 +56,57 @@ fn check_interval(state: &mut LANState, interval: Duration) -> bool {
 }
 
 fn bind(app: &mut App) {
-    if app.lan.socket.is_none() {
-        if !check_interval(&mut app.lan, Duration::from_millis(5000)) {
-            return;
+    if app.lan.socket.is_some() {
+        return;
+    }
+    if !check_interval(&mut app.lan, Duration::from_millis(5000)) {
+        return;
+    }
+
+    match UdpSocket::bind(("0.0.0.0", PORT)) {
+        Err(error) => {
+            if error.kind() == ErrorKind::AddrInUse {
+                set_status(app, "bind error: address already in use");
+            } else {
+                set_status(app, format!("bind error: {:?}", error));
+            }
         }
+        Ok(socket) => {
+            socket.set_broadcast(true).unwrap(); // TODO
+            socket.set_read_timeout(Some(Duration::from_millis(50))).unwrap(); // TODO
 
-        match UdpSocket::bind(("0.0.0.0", PORT)) {
-            Err(error) => {
-                if error.kind() == ErrorKind::AddrInUse {
-                    set_status(app, "bind error: address already in use");
-                } else {
-                    set_status(app, format!("bind error: {:?}", error));
-                }
-            }
-            Ok(socket) => {
-                socket.set_broadcast(true).unwrap();
-                socket.set_read_timeout(Some(Duration::from_millis(50))).unwrap();
-
-                app.lan.socket = Some(socket);
-                update_local_ip(app);
-                
-                set_status(app, "connected");
-            }
+            app.lan.socket = Some(socket);
+            update_local_ip(app);
+            
+            set_status(app, "connected");
         }
     }
 }
 
-fn send_ping(socket: &UdpSocket) -> IOResult<()> {
-    socket.send_to(&[3], ("255.255.255.255", PORT))?;
+fn read_ping(message: &[u8]) -> Option<&str> {
+    let len = if let Some(len) = message.get(0) {
+        *len
+    } else {
+        return None;
+    };
+    let bytes = if let Some(bytes) = message.get(1..1 + len as usize) {
+        bytes
+    } else {
+        return None;
+    };
+    if let Ok(name) = from_utf8(bytes) {
+        Some(name)
+    } else {
+        None
+    }
+}
+
+fn send_ping(socket: &UdpSocket, local_name: &str) -> IOResult<()> {
+    let len = min(local_name.len(), u8::max_value() as usize);
+    let mut message = vec![len as u8];
+    message.extend_from_slice(&local_name.as_bytes()[0..len]);
+
+    socket.send_to(&message, ("255.255.255.255", PORT))?;
     Ok(())
 }
 
@@ -94,7 +119,7 @@ fn ping(app: &mut App) {
     }
 
     if let Some(ref socket) = app.lan.socket {
-        if let Err(error) = send_ping(socket) {
+        if let Err(error) = send_ping(socket, &app.lan.local_name) {
             disconnect(app);
             set_status(app, format!("ping error: {:?}", error));
             return;
@@ -111,18 +136,27 @@ fn ping(app: &mut App) {
 
         match socket.recv_from(&mut buf) {
             Ok((count, source)) => {
-                let _message = &buf[..count];
+                let ip = source.ip();
+                if ip == IpAddr::from([127, 0, 0, 1]) {
+                    continue;
+                }
+
+                let message = &buf[..count];
+
+                let name = if let Some(name) = read_ping(message) {
+                    name
+                } else {
+                    set_status(app, format!("invalid ping from {:?}", source));
+                    continue;
+                };
                 set_status(app, format!("received from {:?}", source));
 
-                let ip = source.ip();
                 if let Some(peer) = app.lan.peers.iter_mut().find(|a| a.address == ip) {
-                    // update name
-                    // peer.name = 
+                    peer.name.clear();
+                    peer.name.push_str(name);
                 } else {
                     app.lan.peers.push(Peer {
-                        // name: "???".into(),
-                        // name: format!("{:")
-                        name: source.ip().to_string(),
+                        name: name.to_string(),
                         address: source.ip(),
                     });
                 }
