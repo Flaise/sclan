@@ -114,6 +114,56 @@ fn send_ping(socket: &UdpSocket, local_name: &str) -> IOResult<()> {
     Ok(())
 }
 
+/// Returns false when done.
+fn receive_ping(app: &mut App) -> bool {
+    let socket = if let Some(ref socket) = app.lan.socket {
+        socket
+    } else {
+        return false;
+    };
+
+    let mut buf = [0; 2048];
+    match socket.recv_from(&mut buf) {
+        Ok((count, source)) => {
+            let ip = source.ip();
+            if ip == IpAddr::from([127, 0, 0, 1]) {
+                return true;
+            }
+
+            let message = &buf[..count];
+
+            let name = if let Some(name) = read_ping(message) {
+                name
+            } else {
+                set_status(app, format!("invalid ping from {:?}", source));
+                return true;
+            };
+            set_status(app, format!("received from {:?}", source));
+
+            if let Some(peer) = app.lan.peers.iter_mut().find(|a| a.address == ip) {
+                peer.name.clear();
+                peer.name.push_str(name);
+            } else {
+                app.lan.peers.push(Peer {
+                    name: name.to_string(),
+                    address: source.ip(),
+                });
+            }
+            true
+        }
+        Err(error) => {
+            match error.kind() {
+                ErrorKind::TimedOut | ErrorKind::WouldBlock => {}
+                _ => {
+                    set_status(app, format!("recv error: {:?}", error));
+                    disconnect(app);
+                }
+            }
+            return false;
+        }
+    }
+}
+
 fn ping(app: &mut App) {
     if app.lan.socket.is_none() {
         return;
@@ -130,51 +180,9 @@ fn ping(app: &mut App) {
         }
     }
 
-    let mut buf = [0; 2048];
     loop {
-        let socket = if let Some(ref socket) = app.lan.socket {
-            socket
-        } else {
-            break;
-        };
-
-        match socket.recv_from(&mut buf) {
-            Ok((count, source)) => {
-                let ip = source.ip();
-                if ip == IpAddr::from([127, 0, 0, 1]) {
-                    continue;
-                }
-
-                let message = &buf[..count];
-
-                let name = if let Some(name) = read_ping(message) {
-                    name
-                } else {
-                    set_status(app, format!("invalid ping from {:?}", source));
-                    continue;
-                };
-                set_status(app, format!("received from {:?}", source));
-
-                if let Some(peer) = app.lan.peers.iter_mut().find(|a| a.address == ip) {
-                    peer.name.clear();
-                    peer.name.push_str(name);
-                } else {
-                    app.lan.peers.push(Peer {
-                        name: name.to_string(),
-                        address: source.ip(),
-                    });
-                }
-            }
-            Err(error) => {
-                match error.kind() {
-                    ErrorKind::TimedOut | ErrorKind::WouldBlock => {}
-                    _ => {
-                        set_status(app, format!("recv error: {:?}", error));
-                        disconnect(app);
-                    }
-                }
-                break;
-            }
+        if !receive_ping(app) {
+            return;
         }
     }
 }
