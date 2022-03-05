@@ -114,14 +114,16 @@ fn copy(app: &mut App) -> Result<(), Box<dyn Error>> {
 }
 
 fn input(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Error>> {
-    let key = if poll(timeout)? {
-        if let Event::Key(key) = read()? {
-            key
-        } else {
+    if !poll(timeout)? {
+        return Ok(());
+    }
+    let key = match read()? {
+        Event::Key(key) => key,
+        Event::Resize(_, _) => {
+            app.needs_redraw = true;
             return Ok(());
         }
-    } else {
-        return Ok(());
+        _ => return Ok(()),
     };
 
     match (app.input_mode, key.code, key.modifiers) {
