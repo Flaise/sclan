@@ -1,4 +1,4 @@
-use std::net::{UdpSocket, IpAddr};
+use std::net::{UdpSocket, IpAddr, TcpListener};
 use std::time::Instant;
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -59,7 +59,8 @@ impl Default for RecipientState {
 
 #[derive(Default)]
 pub struct LANState {
-    pub socket: Option<UdpSocket>,
+    pub udp_socket: Option<UdpSocket>,
+    pub tcp_server: Option<TcpListener>,
     pub peers: Vec<Peer>,
     pub local_name: String,
     pub local_addr: String,

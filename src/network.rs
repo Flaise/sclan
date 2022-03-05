@@ -1,4 +1,4 @@
-use std::net::{UdpSocket, IpAddr};
+use std::net::{UdpSocket, IpAddr, TcpListener};
 use std::cmp::min;
 use std::time::{Duration, Instant};
 use std::io::{ErrorKind, Result as IOResult};
@@ -13,7 +13,8 @@ pub fn network_update(app: &mut App) {
         app.lan.local_name = gethostname().into_string().unwrap_or("???".into());
     }
 
-    bind(app);
+    bind_tcp(app);
+    bind_udp(app);
     ping(app);
 }
 
@@ -39,11 +40,6 @@ fn update_local_ip(app: &mut App) {
         .unwrap_or("???".to_string());
 }
 
-fn disconnect(app: &mut App) {
-    app.lan.socket = None;
-    app.lan.local_addr.clear();
-}
-
 fn check_interval(state: &mut LANState, interval: Duration) -> bool {
     let now = Instant::now();
     let ready = state.last_ping
@@ -55,36 +51,73 @@ fn check_interval(state: &mut LANState, interval: Duration) -> bool {
     ready
 }
 
-fn bind(app: &mut App) {
-    if app.lan.socket.is_some() {
+fn bind_udp(app: &mut App) {
+    if app.lan.udp_socket.is_some() {
         return;
     }
-    if !check_interval(&mut app.lan, Duration::from_millis(5000)) {
+    if !check_interval(&mut app.lan, Duration::from_millis(3000)) {
         return;
     }
 
-    match make_socket() {
+    match make_udp_socket() {
         Err(error) => {
             if error.kind() == ErrorKind::AddrInUse {
-                set_status(app, "error: address already in use");
+                set_status(app, "UDP error: address already in use");
             } else {
-                set_status(app, format!("error: {:?}", error));
+                set_status(app, format!("UDP error: {:?}", error));
             }
         }
         Ok(socket) => {
-            app.lan.socket = Some(socket);
+            app.lan.udp_socket = Some(socket);
             update_local_ip(app);
             
-            set_status(app, "connected");
+            set_status(app, "UDP ready");
         }
     }
 }
 
-fn make_socket() -> IOResult<UdpSocket> {
+fn disconnect_udp(app: &mut App) {
+    app.lan.udp_socket = None;
+    app.lan.local_addr.clear();
+}
+
+fn make_udp_socket() -> IOResult<UdpSocket> {
     let socket = UdpSocket::bind(("0.0.0.0", PORT))?;
     socket.set_broadcast(true)?;
     socket.set_read_timeout(Some(Duration::from_millis(50)))?;
     Ok(socket)
+}
+
+fn disconnect_tcp(app: &mut App) {
+    app.lan.tcp_server = None;
+    app.lan.local_addr.clear();
+}
+
+fn gimme_tcp_server_now() -> IOResult<TcpListener> {
+    let server = TcpListener::bind("0.0.0.0:0")?;
+    server.set_nonblocking(true)?;
+    Ok(server)
+}
+
+fn bind_tcp(app: &mut App) {
+    if app.lan.tcp_server.is_some() {
+        return;
+    }
+    if !check_interval(&mut app.lan, Duration::from_millis(3000)) {
+        return;
+    }
+
+    match gimme_tcp_server_now() {
+        Err(error) => {
+            set_status(app, format!("TCP listener error: {:?}", error));
+        }
+        Ok(server) => {
+            app.lan.tcp_server = Some(server);
+            update_local_ip(app);
+            
+            set_status(app, "TCP listener ready");
+        }
+    }
 }
 
 fn parse_ping(message: &[u8]) -> Option<(&str, u16)> {
@@ -142,7 +175,7 @@ fn send_ping(socket: &UdpSocket, local_name: &str) -> IOResult<()> {
 
 /// Returns false when done.
 fn receive_ping(app: &mut App) -> bool {
-    let socket = if let Some(ref socket) = app.lan.socket {
+    let socket = if let Some(ref socket) = app.lan.udp_socket {
         socket
     } else {
         return false;
@@ -181,8 +214,8 @@ fn receive_ping(app: &mut App) -> bool {
             match error.kind() {
                 ErrorKind::TimedOut | ErrorKind::WouldBlock => {}
                 _ => {
+                    disconnect_udp(app);
                     set_status(app, format!("recv error: {:?}", error));
-                    disconnect(app);
                 }
             }
             return false;
@@ -191,16 +224,16 @@ fn receive_ping(app: &mut App) -> bool {
 }
 
 fn ping(app: &mut App) {
-    if app.lan.socket.is_none() {
+    if app.lan.udp_socket.is_none() {
         return;
     }
     if !check_interval(&mut app.lan, Duration::from_millis(2000)) {
         return;
     }
 
-    if let Some(ref socket) = app.lan.socket {
+    if let Some(ref socket) = app.lan.udp_socket {
         if let Err(error) = send_ping(socket, &app.lan.local_name) {
-            disconnect(app);
+            disconnect_udp(app);
             set_status(app, format!("ping error: {:?}", error));
             return;
         }
