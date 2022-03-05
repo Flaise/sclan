@@ -1,4 +1,4 @@
-use std::net::UdpSocket;
+use std::net::{UdpSocket, IpAddr};
 use std::time::Instant;
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -30,11 +30,12 @@ pub struct App {
 
 pub fn set_status(app: &mut App, message: impl AsRef<str>) {
     app.status.clear();
+    app.status.push_str(" ");
     app.status.push_str(message.as_ref());
+    app.status.push_str(" ");
     app.needs_redraw = true;
 }
 
-#[derive(Default)]
 pub struct RecipientState {
     /// For remembering which peer to go back to if it's added back to the list.
     /// The length is 0 if no peer was selected.
@@ -43,6 +44,18 @@ pub struct RecipientState {
     pub index: usize,
     /// False if the peer disappeared out of the list.
     pub valid: bool,
+    pub address: IpAddr,
+}
+
+impl Default for RecipientState {
+    fn default() -> Self {
+        RecipientState {
+            name: Default::default(),
+            index: 0,
+            valid: false,
+            address: [0, 0, 0, 0].into(),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -50,11 +63,13 @@ pub struct LANState {
     pub socket: Option<UdpSocket>,
     pub peers: Vec<Peer>,
     pub local_name: String,
+    pub local_addr: String,
     pub last_ping: Option<Instant>,
 }
 
 pub struct Peer {
     pub name: String,
+    pub address: IpAddr,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]

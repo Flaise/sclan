@@ -140,7 +140,8 @@ pub fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
     if !app.recipient.valid {
         input_block = input_block.title(" Select a recipient. ");
     } else {
-        let send_to = Spans::from(format!(" sending to: {} ", app.recipient.name));
+        let send_to = Spans::from(format!(" sending to: {} - {} ",
+            app.recipient.name, app.recipient.address));
         input_block = input_block.title(send_to);
     }
 
@@ -173,10 +174,12 @@ pub fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
     }
 }
 
-pub fn ui_info(app: &App) -> Paragraph<'static> {
+pub fn ui_info<'a>(app: &'a App) -> Paragraph<'a> {
     Paragraph::new(vec![
         Spans::from("computer name:"),
-        Spans::from(bold(app.lan.local_name.clone())),
+        Spans::from(bold(&app.lan.local_name)),
+        Spans::from("internal address:"),
+        Spans::from(bold(&app.lan.local_addr)),
     ])
 }
 
@@ -189,14 +192,11 @@ fn message_heading(message: &Message) -> Spans<'static> {
         heading.push(bold("←"));
         heading.push(plain(" from "));
     }
-    // heading.push(bold(format!("{:.<16}", message.name)));
 
     heading.push(bold(message.name.clone()));
-    for _ in message.name.len()..16 {
-        heading.push(plain("_"));
-    }
-
-    heading.push(plain(format!(" {}", message.timestamp)));
+    
+    let len = 16usize.saturating_sub(message.name.len());
+    heading.push(plain(format!("{:_<len$} {}", "", message.timestamp, len=len)));
 
     let heading_color = if message.direction == MessageDirection::Sent {
         Color::Yellow
