@@ -63,24 +63,28 @@ fn bind(app: &mut App) {
         return;
     }
 
-    match UdpSocket::bind(("0.0.0.0", PORT)) {
+    match make_socket() {
         Err(error) => {
             if error.kind() == ErrorKind::AddrInUse {
-                set_status(app, "bind error: address already in use");
+                set_status(app, "error: address already in use");
             } else {
-                set_status(app, format!("bind error: {:?}", error));
+                set_status(app, format!("error: {:?}", error));
             }
         }
         Ok(socket) => {
-            socket.set_broadcast(true).unwrap(); // TODO
-            socket.set_read_timeout(Some(Duration::from_millis(50))).unwrap(); // TODO
-
             app.lan.socket = Some(socket);
             update_local_ip(app);
             
             set_status(app, "connected");
         }
     }
+}
+
+fn make_socket() -> IOResult<UdpSocket> {
+    let socket = UdpSocket::bind(("0.0.0.0", PORT))?;
+    socket.set_broadcast(true)?;
+    socket.set_read_timeout(Some(Duration::from_millis(50)))?;
+    Ok(socket)
 }
 
 fn read_ping(message: &[u8]) -> Option<&str> {
