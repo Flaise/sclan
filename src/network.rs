@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use std::io::{ErrorKind, Result as IOResult};
 use std::str::from_utf8;
 use gethostname::gethostname;
-use crate::data::{LANState, Peer, set_status, App};
+use crate::data::{LANState, Peer, set_status, App, Message, now_fmt, MessageType};
 
 const PORT: u16 = 31331;
 
@@ -87,7 +87,7 @@ fn make_socket() -> IOResult<UdpSocket> {
     Ok(socket)
 }
 
-fn parse_ping(message: &[u8]) -> Option<(&str, u16)> {
+fn parse_ping(message: &[u8]) -> Option<&str> {
     let len = if let Some(len) = message.get(0) {
         *len
     } else {
@@ -106,35 +106,13 @@ fn parse_ping(message: &[u8]) -> Option<(&str, u16)> {
         return None;
     };
 
-    if message.get(1 + len as usize) != Some(&0) {
-        // use zero termination just to make it easier to catch malformed packets
-        return None;
-    }
-
-    let port_index = 2 + len as usize;
-    let port_bytes = if let Some(a) = message.get(port_index..port_index + 2) {
-        a
-    } else {
-        return None;
-    };
-
-    let port = u16::from_be_bytes(port_bytes.try_into().unwrap());
-    if port == 0 {
-        return None;
-    }
-
-    Some((name, port))
+    Some(name)
 }
 
 fn send_ping(socket: &UdpSocket, local_name: &str) -> IOResult<()> {
     let len = min(local_name.len(), u8::max_value() as usize);
     let mut message = vec![len as u8];
     message.extend_from_slice(&local_name.as_bytes()[0..len]);
-
-    message.push(0);
-
-    let port = 14u16;
-    message.extend_from_slice(&port.to_be_bytes());
 
     socket.send_to(&message, ("255.255.255.255", PORT))?;
     Ok(())
@@ -158,7 +136,7 @@ fn receive_ping(app: &mut App) -> bool {
 
             let message = &buf[..count];
 
-            let (name, tcp_port) = if let Some(a) = parse_ping(message) {
+            let name = if let Some(a) = parse_ping(message) {
                 a
             } else {
                 set_status(app, format!("invalid ping from {:?}", source));
@@ -211,4 +189,13 @@ fn ping(app: &mut App) {
             return;
         }
     }
+}
+
+pub fn send(app: &mut App, message: String) {
+    app.messages.push(Message {
+        timestamp: now_fmt(),
+        direction: MessageType::Sending,
+        name: app.recipient.peer.name.clone(),
+        content: message,
+    });
 }

@@ -73,26 +73,28 @@ pub struct Peer {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub enum MessageDirection {
+pub enum MessageType {
     Sent,
+    Sending,
+    SendFailed,
     Received,
 }
 
-impl Default for MessageDirection {
-    fn default() -> MessageDirection {
-        MessageDirection::Sent
+impl Default for MessageType {
+    fn default() -> MessageType {
+        MessageType::Sent
     }
 }
 
 #[derive(Default)]
 pub struct Message {
     pub timestamp: String,
-    pub direction: MessageDirection,
+    pub direction: MessageType,
     pub name: String,
     pub content: String,
 }
 
-fn now_fmt() -> String {
+pub fn now_fmt() -> String {
     let desc = format_description!(
         "[hour padding:space]:[minute] [month padding:space]/[day padding:space]/[year]"
     );
@@ -106,7 +108,7 @@ fn now_fmt() -> String {
 pub fn sent(name: String, content: String) -> Message {
     Message {
         timestamp: now_fmt(),
-        direction: MessageDirection::Sent,
+        direction: MessageType::Sent,
         name,
         content,
     }
@@ -115,7 +117,7 @@ pub fn sent(name: String, content: String) -> Message {
 pub fn received(name: String, content: String) -> Message {
     Message {
         timestamp: now_fmt(),
-        direction: MessageDirection::Received,
+        direction: MessageType::Received,
         name,
         content,
     }

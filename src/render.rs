@@ -9,7 +9,7 @@ use tui::layout::{Alignment, Rect};
 use unicode_width::UnicodeWidthStr;
 use textwrap::wrap;
 use crate::App;
-use crate::data::{InputMode, MessageDirection, Message};
+use crate::data::{InputMode, MessageType, Message};
 
 fn plain<'a, T>(message: T) -> Span<'a>
 where T: Into<Cow<'a, str>> {
@@ -185,12 +185,22 @@ pub fn ui_info<'a>(app: &'a App) -> Paragraph<'a> {
 
 fn message_heading(message: &Message) -> Spans<'static> {
     let mut heading = vec![];
-    if message.direction == MessageDirection::Sent {
-        heading.push(bold("→"));
-        heading.push(plain(" to   "));
-    } else {
-        heading.push(bold("←"));
-        heading.push(plain(" from "));
+    match message.direction {
+        MessageType::Sent => {
+            heading.push(bold("→"));
+            heading.push(plain(" to     "));
+        }
+        MessageType::Sending => {
+            heading.push(bold("→"));
+            heading.push(plain(" ...    "));
+        }
+        MessageType::SendFailed => {
+            heading.push(bold("→ failed "));
+        }
+        MessageType::Received => {
+            heading.push(bold("←"));
+            heading.push(plain(" from   "));
+        }
     }
 
     heading.push(bold(message.name.clone()));
@@ -198,11 +208,13 @@ fn message_heading(message: &Message) -> Spans<'static> {
     let len = 16usize.saturating_sub(message.name.len());
     heading.push(plain(format!("{:_<len$} {}", "", message.timestamp, len=len)));
 
-    let heading_color = if message.direction == MessageDirection::Sent {
-        Color::Yellow
-    } else {
-        Color::LightCyan
+    let heading_color = match message.direction {
+        MessageType::Sent => Color::Yellow,
+        MessageType::Sending => Color::DarkGray,
+        MessageType::SendFailed => Color::Red,
+        MessageType::Received => Color::LightCyan,
     };
+
     for span in &mut heading {
         span.style = span.style.fg(heading_color);
     }

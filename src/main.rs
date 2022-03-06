@@ -15,7 +15,7 @@ use crossterm::{
 use tui::{backend::{Backend, CrosstermBackend}, Terminal};
 use clipboard::{ClipboardProvider, ClipboardContext};
 use crate::data::{App, InputMode, sent, received};
-use crate::network::network_update;
+use crate::network::{network_update, send};
 use crate::layout::ui;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -201,7 +201,7 @@ fn input(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Error>> {
         (InputMode::Editing, KeyCode::Enter, _) => {
             if app.input.trim().len() > 0 {
                 let content = take(&mut app.input);
-                app.messages.push(sent(app.recipient.peer.name.clone(), content));
+                send(app, content);
             } else {
                 app.input.clear();
                 app.input_mode = InputMode::Normal;
