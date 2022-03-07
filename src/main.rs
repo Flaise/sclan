@@ -14,8 +14,8 @@ use crossterm::{
 };
 use tui::{backend::{Backend, CrosstermBackend}, Terminal};
 use clipboard::{ClipboardProvider, ClipboardContext};
-use crate::data::{App, InputMode, sent, received, now_fmt, Message, MessageType};
-use crate::network::{ToNet, message_to_net, message_from_net};
+use crate::data::{App, InputMode, sent, received, now_fmt, Message, MessageType, set_status};
+use crate::network::{ToNet, message_to_net, message_from_net, FromNet};
 use crate::layout::ui;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -68,14 +68,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<(), Box<dyn Error>> {
+    let app = &mut app;
     app.needs_redraw = true;
 
     loop {
-        while let Some(message) = message_from_net(&mut app) {
-            // match message {
-
-            // }
-        }
+        input_async(app);
 
         if app.needs_redraw {
             app.needs_redraw = false;
@@ -86,10 +83,10 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<(), B
                 terminal.hide_cursor()?;
             }
 
-            terminal.draw(|f| ui(f, &app))?;
+            terminal.draw(|f| ui(f, app))?;
         }
 
-        input(&mut app, Duration::from_millis(500))?;
+        input_terminal(app, Duration::from_millis(500))?;
 
         if app.quitting {
             return Ok(());
@@ -97,7 +94,18 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<(), B
     }
 }
 
-fn input(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Error>> {
+fn input_async(app: &mut App) {
+    while let Some(message) = message_from_net(app) {
+        match message {
+            FromNet::ShowStatus(content) => set_status(app, content),
+            FromNet::ShowLocalName(name) => app.lan.local_name = name,
+            _ => {} // TODO
+        }
+        app.needs_redraw = true;
+    }
+}
+
+fn input_terminal(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Error>> {
     if !poll(timeout)? {
         return Ok(());
     }
