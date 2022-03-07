@@ -8,3 +8,4 @@ Features
 Planned Features
 * End to end encryption.
 * File transfer.
+* Logging.

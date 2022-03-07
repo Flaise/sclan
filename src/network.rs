@@ -88,23 +88,9 @@ fn make_socket() -> IOResult<UdpSocket> {
 }
 
 fn parse_ping(message: &[u8]) -> Option<(&str, u16)> {
-    let len = if let Some(len) = message.get(0) {
-        *len
-    } else {
-        return None;
-    };
-
-    let name_bytes = if let Some(a) = message.get(1..1 + len as usize) {
-        a
-    } else {
-        return None;
-    };
-
-    let name = if let Ok(a) = from_utf8(name_bytes) {
-        a
-    } else {
-        return None;
-    };
+    let len = *message.get(0)?;
+    let name_bytes = message.get(1..1 + len as usize)?;
+    let name = from_utf8(name_bytes).ok()?;
 
     if message.get(1 + len as usize) != Some(&0) {
         // use zero termination just to make it easier to catch malformed packets
@@ -112,11 +98,7 @@ fn parse_ping(message: &[u8]) -> Option<(&str, u16)> {
     }
 
     let port_index = 2 + len as usize;
-    let port_bytes = if let Some(a) = message.get(port_index..port_index + 2) {
-        a
-    } else {
-        return None;
-    };
+    let port_bytes = message.get(port_index..port_index + 2)?;
 
     let port = u16::from_be_bytes(port_bytes.try_into().unwrap());
     if port == 0 {
@@ -141,53 +123,40 @@ fn send_ping(socket: &UdpSocket, local_name: &str) -> IOResult<()> {
 }
 
 /// Returns false when done.
-fn receive_ping(app: &mut App) -> bool {
+fn receive_ping(app: &mut App) -> IOResult<()> {
     let socket = if let Some(ref socket) = app.lan.socket {
         socket
     } else {
-        return false;
+        return Err(ErrorKind::NotConnected.into());
     };
 
     let mut buf = [0; 2048];
-    match socket.recv_from(&mut buf) {
-        Ok((count, source)) => {
-            let ip = source.ip();
-            if ip == IpAddr::from([127, 0, 0, 1]) {
-                return true;
-            }
-
-            let message = &buf[..count];
-
-            let (name, _port) = if let Some(a) = parse_ping(message) {
-                a
-            } else {
-                set_status(app, format!("invalid ping from {:?}", source));
-                return true;
-            };
-            set_status(app, format!("received from {:?}", source));
-
-            if let Some(peer) = app.lan.peers.iter_mut().find(|a| a.address == ip) {
-                peer.name.clear();
-                peer.name.push_str(name);
-            } else {
-                app.lan.peers.push(Peer {
-                    name: name.to_string(),
-                    address: source.ip(),
-                });
-            }
-            true
-        }
-        Err(error) => {
-            match error.kind() {
-                ErrorKind::TimedOut | ErrorKind::WouldBlock => {}
-                _ => {
-                    set_status(app, format!("recv error: {:?}", error));
-                    disconnect(app);
-                }
-            }
-            return false;
-        }
+    let (count, source) = socket.recv_from(&mut buf)?;
+    let ip = source.ip();
+    if ip == IpAddr::from([127, 0, 0, 1]) {
+        return Ok(());
     }
+
+    let message = &buf[..count];
+
+    let (name, _port) = if let Some(a) = parse_ping(message) {
+        a
+    } else {
+        set_status(app, format!("invalid ping from {:?}", source));
+        return Ok(());
+    };
+    set_status(app, format!("received from {:?}", source));
+
+    if let Some(peer) = app.lan.peers.iter_mut().find(|a| a.address == ip) {
+        peer.name.clear();
+        peer.name.push_str(name);
+    } else {
+        app.lan.peers.push(Peer {
+            name: name.to_string(),
+            address: source.ip(),
+        });
+    }
+    Ok(())
 }
 
 fn ping(app: &mut App) {
@@ -207,8 +176,15 @@ fn ping(app: &mut App) {
     }
 
     for _ in 0..50 {
-        if !receive_ping(app) {
-            return;
+        if let Err(error) = receive_ping(app) {
+            match error.kind() {
+                ErrorKind::TimedOut | ErrorKind::WouldBlock => {}
+                _ => {
+                    set_status(app, format!("recv error: {:?}", error));
+                    disconnect(app);
+                }
+            }
+            break;
         }
     }
 }
