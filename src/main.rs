@@ -14,8 +14,8 @@ use crossterm::{
 };
 use tui::{backend::{Backend, CrosstermBackend}, Terminal};
 use clipboard::{ClipboardProvider, ClipboardContext};
-use crate::data::{App, InputMode, sent, received};
-use crate::network::{network_update, send};
+use crate::data::{App, InputMode, sent, received, now_fmt, Message, MessageType};
+use crate::network::{ToNet, message_to_net, message_from_net};
 use crate::layout::ui;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -71,7 +71,11 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<(), B
     app.needs_redraw = true;
 
     loop {
-        network_update(&mut app);
+        while let Some(message) = message_from_net(&mut app) {
+            // match message {
+
+            // }
+        }
 
         if app.needs_redraw {
             app.needs_redraw = false;
@@ -91,22 +95,6 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<(), B
             return Ok(());
         }
     }
-}
-
-fn paste(app: &mut App) -> Result<(), Box<dyn Error>> {
-    let mut ctx: ClipboardContext = ClipboardProvider::new()?;
-    let mut stuff = ctx.get_contents()?;
-    app.input.extend(stuff.drain(..));
-    Ok(())
-}
-
-fn copy(app: &mut App) -> Result<(), Box<dyn Error>> {
-    if let Some(index) = app.message_highlight {
-        let content = app.messages[index as usize].content.clone();
-        let mut ctx: ClipboardContext = ClipboardProvider::new()?;
-        ctx.set_contents(content)?;
-    }
-    Ok(())
 }
 
 fn input(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Error>> {
@@ -224,5 +212,41 @@ fn input(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Error>> {
     }
     
     app.needs_redraw = true;
+    Ok(())
+}
+
+fn send(app: &mut App, content: String) {
+    if app.recipient.valid {
+        let message_id = 0;
+
+        app.messages.push(Message {
+            // TODO: message_id
+            timestamp: now_fmt(),
+            direction: MessageType::Sending,
+            name: app.recipient.peer.name.clone(),
+            content: content.clone(),
+        });
+
+        message_to_net(app, ToNet::Send {
+            message_id,
+            address: app.recipient.peer.address,
+            content,
+        });
+    }
+}
+
+fn paste(app: &mut App) -> Result<(), Box<dyn Error>> {
+    let mut ctx: ClipboardContext = ClipboardProvider::new()?;
+    let mut stuff = ctx.get_contents()?;
+    app.input.extend(stuff.drain(..));
+    Ok(())
+}
+
+fn copy(app: &mut App) -> Result<(), Box<dyn Error>> {
+    if let Some(index) = app.message_highlight {
+        let content = app.messages[index as usize].content.clone();
+        let mut ctx: ClipboardContext = ClipboardProvider::new()?;
+        ctx.set_contents(content)?;
+    }
     Ok(())
 }

@@ -3,12 +3,88 @@ use std::cmp::min;
 use std::time::{Duration, Instant};
 use std::io::{ErrorKind, Result as IOResult};
 use std::str::from_utf8;
+use std::sync::mpsc::{Sender, Receiver, channel};
+use std::thread::Builder as ThreadBuilder;
 use gethostname::gethostname;
-use crate::data::{LANState, Peer, set_status, App, Message, now_fmt, MessageType};
+// use tokio::main as tokio_main;
+use tokio::runtime::Builder as RuntimeBuilder;
+use crate::data::{Peer, set_status, App, LANIOState};
 
 const PORT: u16 = 31331;
 
-pub fn network_update(app: &mut App) {
+struct LANInternal {
+    socket: Option<UdpSocket>,
+    to_app: Sender<FromNet>,
+    from_app: Receiver<ToNet>,
+}
+
+pub enum FromNet {
+    ShowLocalName(String),
+    ShowLocalAddress(String),
+    ShowStatus(String),
+    MessageFailed(u32),
+    MessageArrived(u32),
+}
+
+pub enum ToNet {
+    Send {
+        message_id: u32,
+        address: IpAddr,
+        content: String,
+    }
+}
+
+pub fn message_to_net(app: &mut App, message: ToNet) {
+    // TODO
+}
+
+pub fn message_from_net(app: &mut App) -> Option<FromNet> {
+    if let Some(ref state) = app.lan_io {
+        None
+    } else {
+        start_network(app);
+        Some(FromNet::ShowStatus("starting tokio".into()))
+    }
+}
+
+fn start_network(app: &mut App) {
+    let (to_lan, from_app) = channel();
+    let (to_app, from_lan) = channel();
+
+    to_app.send(FromNet::ShowStatus("starting thread".into())).unwrap();
+    if let Err(error) = ThreadBuilder::new()
+            .name("async".into())
+            .spawn(move || run_network(from_app, to_app)) {
+        to_app.send(FromNet::ShowStatus(format!("error starting thread: {:?}", error))).unwrap();
+    }
+
+    app.lan_io = Some(LANIOState {
+        to_lan,
+        from_lan,
+    });
+}
+
+// #[tokio_main(flavor = "current_thread")]
+// async 
+fn run_network(from_app: Receiver<ToNet>, to_app: Sender<FromNet>) {
+    let runtime = RuntimeBuilder::new_current_thread()
+        .enable_all()
+        .build();
+    match runtime {
+        Ok(runtime) => {
+            runtime.block_on(async {
+                println!("Hello world");
+            });
+        }
+        Err(error) => {
+            let _ignore = to_app.send(
+                FromNet::ShowStatus(format!("error building tokio runtime: {:?}", error))
+            );
+        }
+    }
+}
+
+fn network_update(app: &mut App) {
     if app.lan.local_name.len() == 0 {
         app.lan.local_name = gethostname().into_string().unwrap_or("???".into());
     }
@@ -18,19 +94,9 @@ pub fn network_update(app: &mut App) {
 }
 
 fn local_ip() -> Option<IpAddr> {
-    let socket = match UdpSocket::bind("0.0.0.0:0") {
-        Ok(s) => s,
-        Err(_) => return None,
-    };
-
-    if let Err(_) = socket.connect("8.8.8.8:80") {
-        return None;
-    }
-
-    match socket.local_addr() {
-        Ok(addr) => return Some(addr.ip()),
-        Err(_) => return None,
-    };
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    Some(socket.local_addr().ok()?.ip())
 }
 
 fn update_local_ip(app: &mut App) {
@@ -42,17 +108,6 @@ fn update_local_ip(app: &mut App) {
 fn disconnect(app: &mut App) {
     app.lan.socket = None;
     app.lan.local_addr.clear();
-}
-
-fn check_interval(state: &mut LANState, interval: Duration) -> bool {
-    let now = Instant::now();
-    let ready = state.last_ping
-        .map(|last| now.duration_since(last) >= interval)
-        .unwrap_or(true);
-    if ready {
-        state.last_ping = Some(now);
-    }
-    ready
 }
 
 fn bind(app: &mut App) {
@@ -187,13 +242,4 @@ fn ping(app: &mut App) {
             break;
         }
     }
-}
-
-pub fn send(app: &mut App, message: String) {
-    app.messages.push(Message {
-        timestamp: now_fmt(),
-        direction: MessageType::Sending,
-        name: app.recipient.peer.name.clone(),
-        content: message,
-    });
 }

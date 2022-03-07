@@ -1,8 +1,6 @@
-use tui::{
-    backend::{Backend},
-    layout::{Constraint, Direction, Layout, Alignment, Rect},
-    Frame,
-};
+use tui::backend::Backend;
+use tui::layout::{Constraint, Direction, Layout, Alignment, Rect};
+use tui::Frame;
 use crate::App;
 use crate::render::{ui_scrolling_list, render_input, ui_instructions, ui_info, ui_messages,
                     ui_status};

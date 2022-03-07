@@ -1,7 +1,8 @@
-use std::net::{UdpSocket, IpAddr};
-use std::time::Instant;
+use std::net::IpAddr;
+use std::sync::mpsc::{Sender, Receiver};
 use time::macros::format_description;
 use time::OffsetDateTime;
+use crate::network::{ToNet, FromNet};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum InputMode {
@@ -23,6 +24,7 @@ pub struct App {
     pub messages: Vec<Message>,
     pub message_highlight: Option<u16>,
     pub lan: LANState,
+    pub lan_io: Option<LANIOState>,
     pub recipient: RecipientState,
     pub needs_redraw: bool,
     pub status: String,
@@ -59,17 +61,22 @@ impl Default for RecipientState {
 
 #[derive(Default)]
 pub struct LANState {
-    pub socket: Option<UdpSocket>,
     pub peers: Vec<Peer>,
     pub local_name: String,
     pub local_addr: String,
-    pub last_ping: Option<Instant>,
+}
+
+pub struct LANIOState {
+    pub to_lan: Sender<ToNet>,
+    pub from_lan: Receiver<FromNet>,
 }
 
 #[derive(Clone)]
 pub struct Peer {
     pub name: String,
     pub address: IpAddr,
+
+    // TODO: last_seen
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
