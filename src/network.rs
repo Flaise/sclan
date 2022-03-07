@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 use std::cmp::min;
 use std::time::Duration;
-use std::io::{ErrorKind, Result as IOResult};
+use std::io::{ErrorKind, Result as IOResult, Error as IOError};
 use std::str::from_utf8;
 use std::sync::mpsc::{Sender, Receiver, channel, TryRecvError};
 use std::thread::Builder as ThreadBuilder;
@@ -9,9 +9,9 @@ use std::sync::Arc;
 use gethostname::gethostname;
 use tokio::runtime::Builder as RuntimeBuilder;
 use tokio::time::sleep;
-use tokio::spawn;
+use tokio::{spawn, select};
 use tokio::net::UdpSocket;
-use crate::data::{Peer, App, LANIOState};
+use crate::data::{App, LANIOState};
 
 const PORT: u16 = 31331;
 
@@ -104,12 +104,17 @@ fn run_network(_from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>) {
                 if !show_status(&mut to_app, "runtime started") {
                     return;
                 }
-                spawn(task_local_name(to_app.clone()));
-                spawn(task_ping(to_app.clone()));
-                loop {
-                    // TODO: read messages with from_app
-                    sleep(Duration::from_secs(1)).await;
-                }
+
+                // let state = Arc::new(LANInternal {
+                //     socket: None,
+                //     to_app,
+                //     from_app,
+                // });
+
+                let a = spawn(task_local_name(to_app.clone()));
+                let b = spawn(task_ping(to_app.clone()));
+                a.await.unwrap();
+                b.await.unwrap(); // TODO
             });
         }
         Err(error) => {
@@ -141,53 +146,74 @@ async fn task_ping(mut to_app: Sender<FromNet>) {
                         return;
                     }
                 }
+
+                sleep(Duration::from_secs(5)).await;
                 continue;
             }
             Ok(a) => a,
         };
+        let socket = Arc::new(socket);
 
         if !show_status(&mut to_app, "connected") {
             return;
         }
         show_local_ip(&mut to_app);
 
-        let sock_a = Arc::new(socket);
-        let sock_b = sock_a.clone();
+        let pout = task_ping_out(socket.clone(), to_app.clone());
+        let pin = task_ping_in(socket, to_app.clone());
 
-        let mut to_app = to_app.clone();
-        let mut to_app_2 = to_app.clone();
-
-        spawn(async move {
-            loop {
-                if let Err(error) = send_ping(&sock_a, "uh?").await {//&app.lan.local_name) {
-                    // disconnect(app); // TODO
-
-                    if !show_status(&mut to_app, format!("ping error: {:?}", error)) {
-                        return;
-                    }
+        let done = select! {
+            done = pout => done,
+            done = pin => done,
+        };
+        match done {
+            PingDone::Exiting => return,
+            PingDone::IO(error) => {
+                if !show_status(&mut to_app, format!("error: {:?}", error)) {
                     return;
                 }
-
-                sleep(Duration::from_secs(2)).await;
-            }
-        });
-
-        loop {
-            if let Err(error) = receive_ping(&sock_b, &mut to_app_2).await {
-                match error.kind() {
-                    ErrorKind::TimedOut | ErrorKind::WouldBlock => {}
-                    _ => {
-                        if !show_status(&mut to_app_2, format!("recv error: {:?}", error)) {
-                            return;
-                        }
-                        // disconnect(app); // TODO
-                    }
-                }
-                break;
             }
         }
 
+        if let Err(_) = to_app.send(FromNet::ShowLocalAddress("".into())) {
+            return;
+        }
+
         sleep(Duration::from_secs(5)).await;
+    }
+}
+
+enum PingDone {
+    Exiting,
+    IO(IOError),
+}
+
+async fn task_ping_in(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>) -> PingDone {
+    loop {
+        if let Err(error) = receive_ping(&socket, &mut to_app).await {
+            match error.kind() {
+                ErrorKind::TimedOut | ErrorKind::WouldBlock => {}
+                _ => {
+                    if !show_status(&mut to_app, format!("recv error: {:?}", error)) {
+                        return PingDone::Exiting;
+                    }
+                    return PingDone::IO(error);
+                }
+            }
+        }
+    }
+}
+
+async fn task_ping_out(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>) -> PingDone {
+    loop {
+        if let Err(error) = send_ping(&socket, "uh?").await {//&app.lan.local_name) {
+            if !show_status(&mut to_app, format!("ping error: {:?}", error)) {
+                return PingDone::Exiting;
+            }
+            return PingDone::IO(error);
+        }
+
+        sleep(Duration::from_secs(2)).await;
     }
 }
 
@@ -213,11 +239,6 @@ fn show_local_ip(to_app: &mut Sender<FromNet>) {
         .unwrap_or("???".to_string());
     let _ignore = to_app.send(FromNet::ShowLocalAddress(addr));
 }
-
-// fn disconnect(app: &mut App) {
-//     app.lan.socket = None;
-//     app.lan.local_addr.clear();
-// }
 
 async fn make_socket() -> IOResult<UdpSocket> {
     let socket = UdpSocket::bind(("0.0.0.0", PORT)).await?;
