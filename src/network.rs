@@ -1,23 +1,25 @@
-use std::net::{UdpSocket, IpAddr};
+use std::net::IpAddr;
 use std::cmp::min;
 use std::time::Duration;
 use std::io::{ErrorKind, Result as IOResult};
 use std::str::from_utf8;
 use std::sync::mpsc::{Sender, Receiver, channel, TryRecvError};
 use std::thread::Builder as ThreadBuilder;
+use std::sync::Arc;
 use gethostname::gethostname;
 use tokio::runtime::Builder as RuntimeBuilder;
 use tokio::time::sleep;
 use tokio::spawn;
+use tokio::net::UdpSocket;
 use crate::data::{Peer, App, LANIOState};
 
 const PORT: u16 = 31331;
 
-struct LANInternal {
-    socket: Option<UdpSocket>,
-    to_app: Sender<FromNet>,
-    from_app: Receiver<ToNet>,
-}
+// struct LANInternal {
+//     socket: Option<UdpSocket>,
+//     to_app: Sender<FromNet>,
+//     from_app: Receiver<ToNet>,
+// }
 
 pub enum FromNet {
     ShowLocalName(String),
@@ -25,6 +27,10 @@ pub enum FromNet {
     ShowStatus(String),
     MessageFailed(u32),
     MessageArrived(u32),
+    Peer {
+        name: String,
+        address: IpAddr,
+    }
 }
 
 pub enum ToNet {
@@ -35,7 +41,7 @@ pub enum ToNet {
     }
 }
 
-pub fn message_to_net(app: &mut App, message: ToNet) {
+pub fn message_to_net(_app: &mut App, _message: ToNet) {
     // TODO
 }
 
@@ -58,16 +64,25 @@ pub fn message_from_net(app: &mut App) -> Option<FromNet> {
     }
 }
 
+/// false = disconnected
+#[must_use]
+fn show_status(to_app: &mut Sender<FromNet>, content: impl Into<String>) -> bool {
+    if let Err(_) = to_app.send(FromNet::ShowStatus(content.into())) {
+        return false;
+    }
+    true
+}
+
 fn start_network(app: &mut App) {
     let (to_lan, from_app) = channel();
-    let (to_app, from_lan) = channel();
+    let (mut to_app, from_lan) = channel();
 
-    to_app.send(FromNet::ShowStatus("starting thread".into())).unwrap();
-    let to_app_2 = to_app.clone();
+    let _ignore = show_status(&mut to_app, "starting thread");
+    let mut to_app_2 = to_app.clone();
     if let Err(error) = ThreadBuilder::new()
             .name("async".into())
             .spawn(move || run_network(from_app, to_app)) {
-        to_app_2.send(FromNet::ShowStatus(format!("error starting thread: {:?}", error))).unwrap();
+        let _ignore = show_status(&mut to_app_2, format!("error starting thread: {:?}", error));
     }
 
     app.lan_io = Some(LANIOState {
@@ -76,8 +91,8 @@ fn start_network(app: &mut App) {
     });
 }
 
-fn run_network(from_app: Receiver<ToNet>, to_app: Sender<FromNet>) {
-    if let Err(_) = to_app.send(FromNet::ShowStatus("starting runtime".into())) {
+fn run_network(_from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>) {
+    if !show_status(&mut to_app, "starting runtime") {
         return;
     }
     let runtime = RuntimeBuilder::new_current_thread()
@@ -86,10 +101,11 @@ fn run_network(from_app: Receiver<ToNet>, to_app: Sender<FromNet>) {
     match runtime {
         Ok(runtime) => {
             runtime.block_on(async {
-                if let Err(_) = to_app.send(FromNet::ShowStatus("runtime started".into())) {
+                if !show_status(&mut to_app, "runtime started") {
                     return;
                 }
                 spawn(task_local_name(to_app.clone()));
+                spawn(task_ping(to_app.clone()));
                 loop {
                     // TODO: read messages with from_app
                     sleep(Duration::from_secs(1)).await;
@@ -97,9 +113,7 @@ fn run_network(from_app: Receiver<ToNet>, to_app: Sender<FromNet>) {
             });
         }
         Err(error) => {
-            let _ignore = to_app.send(
-                FromNet::ShowStatus(format!("error building runtime: {:?}", error))
-            );
+            let _ignore = show_status(&mut to_app, format!("error building runtime: {:?}", error));
         }
     }
 }
@@ -114,153 +128,166 @@ async fn task_local_name(to_app: Sender<FromNet>) {
     }
 }
 
+async fn task_ping(mut to_app: Sender<FromNet>) {
+    loop {
+        let socket = match make_socket().await {
+            Err(error) => {
+                if error.kind() == ErrorKind::AddrInUse {
+                    if !show_status(&mut to_app, "error: address already in use") {
+                        return;
+                    }
+                } else {
+                    if !show_status(&mut to_app, format!("error: {:?}", error)) {
+                        return;
+                    }
+                }
+                continue;
+            }
+            Ok(a) => a,
+        };
+
+        if !show_status(&mut to_app, "connected") {
+            return;
+        }
+        show_local_ip(&mut to_app);
+
+        let sock_a = Arc::new(socket);
+        let sock_b = sock_a.clone();
+
+        let mut to_app = to_app.clone();
+        let mut to_app_2 = to_app.clone();
+
+        spawn(async move {
+            loop {
+                if let Err(error) = send_ping(&sock_a, "uh?").await {//&app.lan.local_name) {
+                    // disconnect(app); // TODO
+
+                    if !show_status(&mut to_app, format!("ping error: {:?}", error)) {
+                        return;
+                    }
+                    return;
+                }
+
+                sleep(Duration::from_secs(2)).await;
+            }
+        });
+
+        loop {
+            if let Err(error) = receive_ping(&sock_b, &mut to_app_2).await {
+                match error.kind() {
+                    ErrorKind::TimedOut | ErrorKind::WouldBlock => {}
+                    _ => {
+                        if !show_status(&mut to_app_2, format!("recv error: {:?}", error)) {
+                            return;
+                        }
+                        // disconnect(app); // TODO
+                    }
+                }
+                break;
+            }
+        }
+
+        sleep(Duration::from_secs(5)).await;
+    }
+}
+
+// async fn task_local_ip(to_app: Sender<FromNet>) {
+//     loop {
+//         let name = gethostname().into_string().unwrap_or("???".into());
+//         if let Err(_) = to_app.send(FromNet::ShowLocalName(name)) {
+//             return;
+//         }
+//         sleep(Duration::from_secs(5)).await;
+//     }
+// }
+
 fn local_ip() -> Option<IpAddr> {
-    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
     socket.connect("8.8.8.8:80").ok()?;
     Some(socket.local_addr().ok()?.ip())
 }
 
-// fn update_local_ip(app: &mut App) {
-//     app.lan.local_addr = local_ip()
-//         .map(|a| a.to_string())
-//         .unwrap_or("???".to_string());
-// }
+fn show_local_ip(to_app: &mut Sender<FromNet>) {
+    let addr = local_ip()
+        .map(|a| a.to_string())
+        .unwrap_or("???".to_string());
+    let _ignore = to_app.send(FromNet::ShowLocalAddress(addr));
+}
 
 // fn disconnect(app: &mut App) {
 //     app.lan.socket = None;
 //     app.lan.local_addr.clear();
 // }
 
-// fn bind(app: &mut App) {
-//     if app.lan.socket.is_some() {
-//         return;
-//     }
-//     if !check_interval(&mut app.lan, Duration::from_millis(5000)) {
-//         return;
-//     }
+async fn make_socket() -> IOResult<UdpSocket> {
+    let socket = UdpSocket::bind(("0.0.0.0", PORT)).await?;
+    socket.set_broadcast(true)?;
+    Ok(socket)
+}
 
-//     match make_socket() {
-//         Err(error) => {
-//             if error.kind() == ErrorKind::AddrInUse {
-//                 set_status(app, "error: address already in use");
-//             } else {
-//                 set_status(app, format!("error: {:?}", error));
-//             }
-//         }
-//         Ok(socket) => {
-//             app.lan.socket = Some(socket);
-//             update_local_ip(app);
-            
-//             set_status(app, "connected");
-//         }
-//     }
-// }
+async fn send_ping(socket: &Arc<UdpSocket>, local_name: &str) -> IOResult<()> {
+    let len = min(local_name.len(), u8::max_value() as usize);
+    let mut message = vec![len as u8];
+    message.extend_from_slice(&local_name.as_bytes()[0..len]);
 
-// fn make_socket() -> IOResult<UdpSocket> {
-//     let socket = UdpSocket::bind(("0.0.0.0", PORT))?;
-//     socket.set_broadcast(true)?;
-//     socket.set_read_timeout(Some(Duration::from_millis(50)))?;
-//     Ok(socket)
-// }
+    message.push(0);
 
-// fn parse_ping(message: &[u8]) -> Option<(&str, u16)> {
-//     let len = *message.get(0)?;
-//     let name_bytes = message.get(1..1 + len as usize)?;
-//     let name = from_utf8(name_bytes).ok()?;
+    let port = 14u16;
+    message.extend_from_slice(&port.to_be_bytes());
 
-//     if message.get(1 + len as usize) != Some(&0) {
-//         // use zero termination just to make it easier to catch malformed packets
-//         return None;
-//     }
+    socket.send_to(&message, ("255.255.255.255", PORT)).await?;
+    Ok(())
+}
 
-//     let port_index = 2 + len as usize;
-//     let port_bytes = message.get(port_index..port_index + 2)?;
+fn parse_ping(message: &[u8]) -> Option<(&str, u16)> {
+    let len = *message.get(0)?;
+    let name_bytes = message.get(1..1 + len as usize)?;
+    let name = from_utf8(name_bytes).ok()?;
 
-//     let port = u16::from_be_bytes(port_bytes.try_into().unwrap());
-//     if port == 0 {
-//         return None;
-//     }
+    if message.get(1 + len as usize) != Some(&0) {
+        // use zero termination just to make it easier to catch malformed packets
+        return None;
+    }
 
-//     Some((name, port))
-// }
+    let port_index = 2 + len as usize;
+    let port_bytes = message.get(port_index..port_index + 2)?;
 
-// fn send_ping(socket: &UdpSocket, local_name: &str) -> IOResult<()> {
-//     let len = min(local_name.len(), u8::max_value() as usize);
-//     let mut message = vec![len as u8];
-//     message.extend_from_slice(&local_name.as_bytes()[0..len]);
+    let port = u16::from_be_bytes(port_bytes.try_into().unwrap());
+    if port == 0 {
+        return None;
+    }
 
-//     message.push(0);
+    Some((name, port))
+}
 
-//     let port = 14u16;
-//     message.extend_from_slice(&port.to_be_bytes());
+async fn receive_ping(socket: &Arc<UdpSocket>, to_app: &mut Sender<FromNet>) -> IOResult<()> {
+    let mut buf = [0; 2048];
+    let (count, source) = socket.recv_from(&mut buf).await?;
+    let ip = source.ip();
+    if ip == IpAddr::from([127, 0, 0, 1]) {
+        return Ok(());
+    }
 
-//     socket.send_to(&message, ("255.255.255.255", PORT))?;
-//     Ok(())
-// }
+    let message = &buf[..count];
 
-// /// Returns false when done.
-// fn receive_ping(app: &mut App) -> IOResult<()> {
-//     let socket = if let Some(ref socket) = app.lan.socket {
-//         socket
-//     } else {
-//         return Err(ErrorKind::NotConnected.into());
-//     };
+    let (name, _port) = if let Some(a) = parse_ping(message) {
+        a
+    } else {
+        if !show_status(to_app, format!("invalid ping from {:?}", source)) {
+            // return;
+        }
+        return Ok(());
+    };
+    if !show_status(to_app, format!("received from {:?}", source)) {
+        // return;
+    }
 
-//     let mut buf = [0; 2048];
-//     let (count, source) = socket.recv_from(&mut buf)?;
-//     let ip = source.ip();
-//     if ip == IpAddr::from([127, 0, 0, 1]) {
-//         return Ok(());
-//     }
+    if let Err(_) = to_app.send(FromNet::Peer {
+        name: name.to_string(),
+        address: source.ip(),
+    }) {
+        // return false;
+    }
 
-//     let message = &buf[..count];
-
-//     let (name, _port) = if let Some(a) = parse_ping(message) {
-//         a
-//     } else {
-//         set_status(app, format!("invalid ping from {:?}", source));
-//         return Ok(());
-//     };
-//     set_status(app, format!("received from {:?}", source));
-
-//     if let Some(peer) = app.lan.peers.iter_mut().find(|a| a.address == ip) {
-//         peer.name.clear();
-//         peer.name.push_str(name);
-//     } else {
-//         app.lan.peers.push(Peer {
-//             name: name.to_string(),
-//             address: source.ip(),
-//         });
-//     }
-//     Ok(())
-// }
-
-// fn ping(app: &mut App) {
-//     if app.lan.socket.is_none() {
-//         return;
-//     }
-//     if !check_interval(&mut app.lan, Duration::from_millis(2000)) {
-//         return;
-//     }
-
-//     if let Some(ref socket) = app.lan.socket {
-//         if let Err(error) = send_ping(socket, &app.lan.local_name) {
-//             disconnect(app);
-//             set_status(app, format!("ping error: {:?}", error));
-//             return;
-//         }
-//     }
-
-//     for _ in 0..50 {
-//         if let Err(error) = receive_ping(app) {
-//             match error.kind() {
-//                 ErrorKind::TimedOut | ErrorKind::WouldBlock => {}
-//                 _ => {
-//                     set_status(app, format!("recv error: {:?}", error));
-//                     disconnect(app);
-//                 }
-//             }
-//             break;
-//         }
-//     }
-// }
+    Ok(())
+}

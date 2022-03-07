@@ -57,7 +57,7 @@ dependencies = [
  "bitflags",
  "crossterm_winapi",
  "libc",
- "mio",
+ "mio 0.7.14",
  "parking_lot",
  "signal-hook",
  "signal-hook-mio",
@@ -136,6 +136,19 @@ name = "mio"
 version = "0.7.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8067b404fe97c70829f082dec8bcf4f71225d7eaea1d8645349cb76fa06205cc"
+dependencies = [
+ "libc",
+ "log",
+ "miow",
+ "ntapi",
+ "winapi",
+]
+
+[[package]]
+name = "mio"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba272f85fa0b41fc91872be579b3bbe0f56b792aa361a380eb669469f68dafb2"
 dependencies = [
  "libc",
  "log",
@@ -277,7 +290,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29fd5867f1c4f2c5be079aee7a2adf1152ebb04a4bc4d341f504b7dece607ed4"
 dependencies = [
  "libc",
- "mio",
+ "mio 0.7.14",
  "signal-hook",
 ]
 
@@ -295,6 +308,16 @@ name = "smallvec"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
+
+[[package]]
+name = "socket2"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66d72b759436ae32898a2af0a14218dbf55efde3feeb170eb623637db85ee1e0"
+dependencies = [
+ "libc",
+ "winapi",
+]
 
 [[package]]
 name = "textwrap"
@@ -329,7 +352,11 @@ version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af73ac49756f3f7c01172e34a23e5d0216f6c32333757c2c61feb2bbff5a5ee"
 dependencies = [
+ "libc",
+ "mio 0.8.0",
  "pin-project-lite",
+ "socket2",
+ "winapi",
 ]
 
 [[package]]

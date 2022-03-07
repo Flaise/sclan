@@ -14,7 +14,7 @@ use crossterm::{
 };
 use tui::{backend::{Backend, CrosstermBackend}, Terminal};
 use clipboard::{ClipboardProvider, ClipboardContext};
-use crate::data::{App, InputMode, sent, received, now_fmt, Message, MessageType, set_status};
+use crate::data::{App, InputMode, sent, received, now_fmt, Message, MessageType, set_status, Peer};
 use crate::network::{ToNet, message_to_net, message_from_net, FromNet};
 use crate::layout::ui;
 
@@ -99,6 +99,18 @@ fn input_async(app: &mut App) {
         match message {
             FromNet::ShowStatus(content) => set_status(app, content),
             FromNet::ShowLocalName(name) => app.lan.local_name = name,
+            FromNet::ShowLocalAddress(addr) => app.lan.local_addr = addr,
+            FromNet::Peer {name, address} => {
+                if let Some(peer) = app.lan.peers.iter_mut().find(|a| a.address == address) {
+                    peer.name.clear();
+                    peer.name.push_str(&name);
+                } else {
+                    app.lan.peers.push(Peer {
+                        name: name.to_string(),
+                        address,
+                    });
+                }
+            }
             _ => {} // TODO
         }
         app.needs_redraw = true;
