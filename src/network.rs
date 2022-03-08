@@ -31,12 +31,16 @@ pub enum FromNet {
     ShowLocalName(String),
     ShowLocalAddress(String),
     ShowStatus(String),
-    MessageFailed(u32),
-    MessageArrived(u32),
+    ShowMessage {
+        source: IpAddr,
+        content: String,
+    },
+    SendFailed(u32),
+    SendArrived(u32),
     Peer {
         name: String,
         address: IpAddr,
-    }
+    },
 }
 
 pub enum ToNet {
@@ -47,8 +51,15 @@ pub enum ToNet {
     }
 }
 
-pub fn message_to_net(_app: &mut App, _message: ToNet) {
-    // TODO
+pub fn message_to_net(app: &mut App, message: ToNet) -> Result<(), ()> {
+    if let Some(ref state) = app.lan_io {
+        if let Err(_) = state.to_lan.send(message) {
+            app.lan_io = None;
+            return Err(());
+        }
+        return Ok(());
+    }
+    Err(())
 }
 
 pub fn message_from_net(app: &mut App) -> Option<FromNet> {
@@ -163,8 +174,8 @@ async fn task_ping(mut to_app: Sender<FromNet>) {
         let pin = task_ping_in(socket, to_app.clone());
 
         let done = select! {
-            done = pout => done,
-            done = pin => done,
+            a = pout => a,
+            a = pin => a,
         };
         match done {
             PingDone::Exiting => return,

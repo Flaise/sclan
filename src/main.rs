@@ -7,6 +7,7 @@ use std::error::Error;
 use std::io::stdout;
 use std::mem::take;
 use std::time::Duration;
+use std::net::IpAddr;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, read, poll},
     execute,
@@ -111,7 +112,9 @@ fn input_async(app: &mut App) {
                     });
                 }
             }
-            _ => {} // TODO
+            FromNet::SendFailed(message_id) => send_failed(app, message_id),
+            FromNet::SendArrived(message_id) => send_arrived(app, message_id),
+            FromNet::ShowMessage {source, content} => show_message(app, source, content),
         }
         app.needs_redraw = true;
     }
@@ -235,23 +238,50 @@ fn input_terminal(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Error>
     Ok(())
 }
 
+fn send_arrived(app: &mut App, message_id: u32) {
+    for message in &mut app.messages {
+        if message.message_id == message_id {
+            message.direction = MessageType::Sent;
+            app.needs_redraw = true;
+            return;
+        }
+    }
+}
+
+fn send_failed(app: &mut App, message_id: u32) {
+    for message in &mut app.messages {
+        if message.message_id == message_id {
+            message.direction = MessageType::SendFailed;
+            app.needs_redraw = true;
+            return;
+        }
+    }
+}
+
+fn show_message(app: &mut App, source: IpAddr, content: String) {
+
+}
+
 fn send(app: &mut App, content: String) {
     if app.recipient.valid {
-        let message_id = 0;
+        app.last_message_id = app.last_message_id.wrapping_add(1);
+        let message_id = app.last_message_id;
 
         app.messages.push(Message {
-            // TODO: message_id
             timestamp: now_fmt(),
             direction: MessageType::Sending,
             name: app.recipient.peer.name.clone(),
             content: content.clone(),
+            message_id,
         });
 
-        message_to_net(app, ToNet::Send {
+        if let Err(_) = message_to_net(app, ToNet::Send {
             message_id,
             address: app.recipient.peer.address,
             content,
-        });
+        }) {
+            send_failed(app, message_id);
+        }
     }
 }
 

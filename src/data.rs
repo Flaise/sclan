@@ -28,6 +28,7 @@ pub struct App {
     pub recipient: RecipientState,
     pub needs_redraw: bool,
     pub status: String,
+    pub last_message_id: u32,
 }
 
 pub fn set_status(app: &mut App, message: impl AsRef<str>) {
@@ -99,6 +100,7 @@ pub struct Message {
     pub direction: MessageType,
     pub name: String,
     pub content: String,
+    pub message_id: u32,
 }
 
 pub fn now_fmt() -> String {
@@ -118,6 +120,7 @@ pub fn sent(name: String, content: String) -> Message {
         direction: MessageType::Sent,
         name,
         content,
+        message_id: 0,
     }
 }
 
@@ -127,5 +130,6 @@ pub fn received(name: String, content: String) -> Message {
         direction: MessageType::Received,
         name,
         content,
+        message_id: 0,
     }
 }
