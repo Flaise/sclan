@@ -1,22 +1,25 @@
 use std::net::{SocketAddr, IpAddr};
 use std::time::Duration;
 use std::sync::mpsc::{Sender, Receiver};
+use std::sync::{Arc, Mutex};
 use tokio::spawn;
 use tokio::time::sleep;
-use tokio::task::{spawn_blocking, JoinHandle};
-// use tokio::sync::mpsc::channel;
-use qp2p::{Config, Endpoint, ConnectionIncoming};
+use tokio::task::spawn_blocking;
+use tokio::sync::mpsc::{channel, Sender as TSender, Receiver as TReceiver};
+use qp2p::{Config, Endpoint, ConnectionIncoming, Connection};
 use crate::network::{FromNet, ToNet, show_error};
 
 pub async fn task_p2p(from_app: Receiver<ToNet>, to_app: Sender<FromNet>) {
-    let a = to_app.clone();
-    let handle = start_task_send(from_app, a);
+    let (to_output, connecting) = channel(1);
 
-    task_receive(to_app).await;
+    let a = to_app.clone();
+    let handle = spawn(task_send(from_app, a, connecting));
+
+    task_receive(to_app, to_output).await;
     handle.await.expect("task panicked");
 }
 
-async fn task_receive(mut to_app: Sender<FromNet>) {
+async fn task_receive(mut to_app: Sender<FromNet>, to_output: TSender<Connection>) {
     loop {
         // TODO: maybe wait until a remote peer is discovered before building the endpoint
         
@@ -46,7 +49,10 @@ async fn task_receive(mut to_app: Sender<FromNet>) {
 
             spawn(task_receive_one(to_app.clone(), source, incoming_messages));
 
-            // TODO: put connection into message channel or some such
+            if let Err(_) = to_output.send(connection).await {
+                // output task exited
+                return;
+            }
         }
     }
 }
@@ -63,25 +69,64 @@ async fn task_receive_one(
     }
 }
 
-fn start_task_send(from_app: Receiver<ToNet>, to_app: Sender<FromNet>) -> JoinHandle<()> {
-    // let (tx, mut rx) = channel(32);
+async fn task_send(from_app: Receiver<ToNet>, to_app: Sender<FromNet>,
+        mut connecting: TReceiver<Connection>) {
 
-    spawn_blocking(move || {
+    let connections = Arc::new(Mutex::new(Vec::<Connection>::new()));
+    let conn2 = connections.clone();
+
+    let task = spawn_blocking(move || {
         while let Ok(command) = from_app.recv() {
             let to_app = to_app.clone();
+            let conn2 = conn2.clone();
             spawn(async move {
                 match command {
                     ToNet::Send {message_id, address, content} => {
-                        if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
-                            // not necessary to bubble up exit signal because from_app will be
-                            // dropped too
-                            return;
+
+
+                        let connections = conn2.lock().expect("mutex poisoned");
+                        let found = connections
+                            .iter().find(|r| r.remote_address().ip() == address);
+                        if let Some(dest) = found {
+                            // if let Err(error) = dest.send(content.into()).await {
+                            //     if !show_error(&mut to_app, format!("error: {:?}", error)) {
+                            //         return;
+                            //     }
+                            //     if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
+                            //         return;
+                            //     }
+                            // } else {
+                            //     if let Err(_) = to_app.send(FromNet::SendArrived(message_id)) {
+                            //         return;
+                            //     }
+                            // }
+                        } else {
+                            if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
+                                // not necessary to bubble up exit signal because from_app will be
+                                // dropped too
+                                return;
+                            }
                         }
                     }
                 }
             });
         }
-    })
+    });
+
+    while let Some(connection) = connecting.recv().await {
+        let mut connections = connections.lock().expect("mutex poisoned");
+
+        let ip = connection.remote_address().ip();
+
+        if let Some(index) = connections.iter().position(|r| r.remote_address().ip() == ip) {
+            // TODO: will this ever happen or does qp2p keep track?
+            connections[index].close(None);
+            connections[index] = connection;
+        } else {
+            connections.push(connection);
+        }
+    }
+
     // task.await.expect("task panicked");
 
     // loop {
