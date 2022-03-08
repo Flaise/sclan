@@ -125,7 +125,7 @@ fn run_network(_from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>) {
 
 async fn task_local_name(to_app: Sender<FromNet>) {
     loop {
-        let name = gethostname().into_string().unwrap_or("???".into());
+        let name = gethostname().into_string().unwrap_or("".into());
         if let Err(_) = to_app.send(FromNet::ShowLocalName(name)) {
             return;
         }
@@ -249,7 +249,7 @@ fn local_ip() -> Option<IpAddr> {
 fn show_local_ip(to_app: &mut Sender<FromNet>) {
     let addr = local_ip()
         .map(|a| a.to_string())
-        .unwrap_or("???".to_string());
+        .unwrap_or("".to_string());
     let _ignore = to_app.send(FromNet::ShowLocalAddress(addr));
 }
 

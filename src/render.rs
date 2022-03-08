@@ -182,12 +182,17 @@ pub fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
 pub fn ui_info<'a>(app: &'a App) -> Paragraph<'a> {
     Paragraph::new(vec![
         Spans::from("computer name:"),
-        Spans::from(bold(&app.lan.local_name)),
+        if app.lan.local_name.len() > 0 {
+            Spans::from(bold(&app.lan.local_name))
+        } else {
+            Spans::from(faded("(pending...)"))
+        },
+
         Spans::from("internal address:"),
         if app.lan.local_addr.len() > 0 {
             Spans::from(bold(&app.lan.local_addr))
         } else {
-            Spans::from(faded("(not connected)"))
+            Spans::from(faded("(connecting...)"))
         },
     ])
 }
