@@ -189,17 +189,38 @@ enum PingDone {
 }
 
 async fn task_ping_in(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>) -> PingDone {
+    let to_app = &mut to_app;
+    let mut buf = [0; 2048];
     loop {
-        if let Err(error) = receive_ping(&socket, &mut to_app).await {
-            match error.kind() {
-                ErrorKind::TimedOut | ErrorKind::WouldBlock => {}
-                _ => {
-                    if !show_status(&mut to_app, format!("recv error: {:?}", error)) {
-                        return PingDone::Exiting;
-                    }
-                    return PingDone::IO(error);
-                }
+        let (count, source) = match socket.recv_from(&mut buf).await {
+            Ok(a) => a,
+            Err(error) => return PingDone::IO(error),
+        };
+        let ip = source.ip();
+        if ip == IpAddr::from([127, 0, 0, 1]) {
+            continue;
+        }
+
+        let message = &buf[..count];
+
+        let (name, _port) = if let Some(a) = parse_ping(message) {
+            a
+        } else {
+            if !show_status(to_app, format!("invalid ping from {:?}", source)) {
+                return PingDone::Exiting;
             }
+            continue;
+        };
+        if !show_status(to_app, format!("received from {:?}", source)) {
+            return PingDone::Exiting;
+        }
+
+        let peer = FromNet::Peer {
+            name: name.to_string(),
+            address: source.ip(),
+        };
+        if let Err(_) = to_app.send(peer) {
+            return PingDone::Exiting;
         }
     }
 }
@@ -271,36 +292,4 @@ fn parse_ping(message: &[u8]) -> Option<(&str, u16)> {
     }
 
     Some((name, port))
-}
-
-async fn receive_ping(socket: &Arc<UdpSocket>, to_app: &mut Sender<FromNet>) -> IOResult<()> {
-    let mut buf = [0; 2048];
-    let (count, source) = socket.recv_from(&mut buf).await?;
-    let ip = source.ip();
-    if ip == IpAddr::from([127, 0, 0, 1]) {
-        return Ok(());
-    }
-
-    let message = &buf[..count];
-
-    let (name, _port) = if let Some(a) = parse_ping(message) {
-        a
-    } else {
-        if !show_status(to_app, format!("invalid ping from {:?}", source)) {
-            // return;
-        }
-        return Ok(());
-    };
-    if !show_status(to_app, format!("received from {:?}", source)) {
-        // return;
-    }
-
-    if let Err(_) = to_app.send(FromNet::Peer {
-        name: name.to_string(),
-        address: source.ip(),
-    }) {
-        // return false;
-    }
-
-    Ok(())
 }
