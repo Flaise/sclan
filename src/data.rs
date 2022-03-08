@@ -27,15 +27,20 @@ pub struct App {
     pub lan_io: Option<LANIOState>,
     pub recipient: RecipientState,
     pub needs_redraw: bool,
-    pub status: String,
+    pub status: StatusState,
     pub last_message_id: u32,
 }
 
-pub fn set_status(app: &mut App, message: impl AsRef<str>) {
-    app.status.clear();
-    app.status.push_str(" ");
-    app.status.push_str(message.as_ref());
-    app.status.push_str(" ");
+#[derive(Default)]
+pub struct StatusState {
+    pub content: String,
+    pub is_error: bool,
+}
+
+pub fn set_status(app: &mut App, is_error: bool, message: impl AsRef<str>) {
+    app.status.content.clear();
+    app.status.content.push_str(message.as_ref());
+    app.status.is_error = is_error;
     app.needs_redraw = true;
 }
 

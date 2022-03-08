@@ -75,6 +75,8 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<(), B
     loop {
         input_async(app);
 
+        // TODO: cull idle client
+
         if app.needs_redraw {
             app.needs_redraw = false;
 
@@ -98,7 +100,8 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<(), B
 fn input_async(app: &mut App) {
     while let Some(message) = message_from_net(app) {
         match message {
-            FromNet::ShowStatus(content) => set_status(app, content),
+            FromNet::ShowStatus(content) => set_status(app, false, content),
+            FromNet::ShowError(content) => set_status(app, true, content),
             FromNet::ShowLocalName(name) => app.lan.local_name = name,
             FromNet::ShowLocalAddress(addr) => app.lan.local_addr = addr,
             FromNet::Peer {name, address} => {
@@ -112,8 +115,12 @@ fn input_async(app: &mut App) {
                     });
                 }
             }
-            FromNet::SendFailed(message_id) => send_failed(app, message_id),
-            FromNet::SendArrived(message_id) => send_arrived(app, message_id),
+            FromNet::SendFailed(message_id) => {
+                update_message(app, message_id, MessageType::SendFailed);
+            }
+            FromNet::SendArrived(message_id) => {
+                update_message(app, message_id, MessageType::Sent);
+            }
             FromNet::ShowMessage {source, content} => show_message(app, source, content),
         }
         app.needs_redraw = true;
@@ -238,20 +245,10 @@ fn input_terminal(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Error>
     Ok(())
 }
 
-fn send_arrived(app: &mut App, message_id: u32) {
+fn update_message(app: &mut App, message_id: u32, new_type: MessageType) {
     for message in &mut app.messages {
         if message.message_id == message_id {
-            message.direction = MessageType::Sent;
-            app.needs_redraw = true;
-            return;
-        }
-    }
-}
-
-fn send_failed(app: &mut App, message_id: u32) {
-    for message in &mut app.messages {
-        if message.message_id == message_id {
-            message.direction = MessageType::SendFailed;
+            message.direction = new_type;
             app.needs_redraw = true;
             return;
         }
@@ -259,13 +256,25 @@ fn send_failed(app: &mut App, message_id: u32) {
 }
 
 fn show_message(app: &mut App, source: IpAddr, content: String) {
+    app.messages.push(Message {
+        timestamp: now_fmt(),
+        direction: MessageType::Received,
+        name: source.to_string(), // TODO: search for source in peer list
+        // TODO: update old messages when a peer becomes named
+        // TODO: maybe also save source address so they can RE-name with the peer
+        content,
+        message_id: 0,
+    });
+}
 
+fn next_message_id(app: &mut App) -> u32 {
+    app.last_message_id = app.last_message_id.wrapping_add(1);
+    app.last_message_id
 }
 
 fn send(app: &mut App, content: String) {
     if app.recipient.valid {
-        app.last_message_id = app.last_message_id.wrapping_add(1);
-        let message_id = app.last_message_id;
+        let message_id = next_message_id(app);
 
         app.messages.push(Message {
             timestamp: now_fmt(),
@@ -280,7 +289,7 @@ fn send(app: &mut App, content: String) {
             address: app.recipient.peer.address,
             content,
         }) {
-            send_failed(app, message_id);
+            update_message(app, message_id, MessageType::SendFailed);
         }
     }
 }

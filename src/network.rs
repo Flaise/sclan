@@ -31,6 +31,7 @@ pub enum FromNet {
     ShowLocalName(String),
     ShowLocalAddress(String),
     ShowStatus(String),
+    ShowError(String),
     ShowMessage {
         source: IpAddr,
         content: String,
@@ -90,6 +91,15 @@ fn show_status(to_app: &mut Sender<FromNet>, content: impl Into<String>) -> bool
     true
 }
 
+/// false = disconnected
+#[must_use]
+fn show_error(to_app: &mut Sender<FromNet>, content: impl Into<String>) -> bool {
+    if let Err(_) = to_app.send(FromNet::ShowError(content.into())) {
+        return false;
+    }
+    true
+}
+
 fn start_network(app: &mut App) {
     let (to_lan, from_app) = channel();
     let (mut to_app, from_lan) = channel();
@@ -99,13 +109,11 @@ fn start_network(app: &mut App) {
     if let Err(error) = ThreadBuilder::new()
             .name("async".into())
             .spawn(move || run_network(from_app, to_app)) {
-        let _ignore = show_status(&mut to_app_2, format!("error starting thread: {:?}", error));
+        let _ignore = show_error(&mut to_app_2, format!("error starting thread: {:?}", error));
+        return;
     }
 
-    app.lan_io = Some(LANIOState {
-        to_lan,
-        from_lan,
-    });
+    app.lan_io = Some(LANIOState {to_lan, from_lan});
 }
 
 fn run_network(_from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>) {
@@ -124,17 +132,18 @@ fn run_network(_from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>) {
 
                 let a = spawn(task_local_name(to_app.clone()));
                 let b = spawn(task_ping(to_app.clone()));
-                a.await.unwrap();
-                b.await.unwrap(); // TODO
+                a.await.expect("task panicked");
+                b.await.expect("task panicked");
             });
         }
         Err(error) => {
-            let _ignore = show_status(&mut to_app, format!("error building runtime: {:?}", error));
+            let _ignore = show_error(&mut to_app, format!("error building runtime: {:?}", error));
         }
     }
 }
 
 async fn task_local_name(to_app: Sender<FromNet>) {
+    // TODO: can the host name be changed at runtime or is this loop a waste of time?
     loop {
         let name = gethostname().into_string().unwrap_or("".into());
         if let Err(_) = to_app.send(FromNet::ShowLocalName(name)) {
@@ -149,11 +158,11 @@ async fn task_ping(mut to_app: Sender<FromNet>) {
         let socket = match make_socket().await {
             Err(error) => {
                 if error.kind() == ErrorKind::AddrInUse {
-                    if !show_status(&mut to_app, "error: address already in use") {
+                    if !show_error(&mut to_app, "error: address already in use") {
                         return;
                     }
                 } else {
-                    if !show_status(&mut to_app, format!("error: {:?}", error)) {
+                    if !show_error(&mut to_app, format!("error: {:?}", error)) {
                         return;
                     }
                 }
@@ -180,7 +189,7 @@ async fn task_ping(mut to_app: Sender<FromNet>) {
         match done {
             PingDone::Exiting => return,
             PingDone::IO(error) => {
-                if !show_status(&mut to_app, format!("error: {:?}", error)) {
+                if !show_error(&mut to_app, format!("error: {:?}", error)) {
                     return;
                 }
             }
@@ -241,7 +250,7 @@ async fn task_ping_out(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>) -> P
         let name = gethostname().into_string().unwrap_or("???".into());
 
         if let Err(error) = send_ping(&socket, &name).await {
-            if !show_status(&mut to_app, format!("ping error: {:?}", error)) {
+            if !show_error(&mut to_app, format!("ping error: {:?}", error)) {
                 return PingDone::Exiting;
             }
             return PingDone::IO(error);
@@ -277,7 +286,7 @@ async fn send_ping(socket: &Arc<UdpSocket>, local_name: &str) -> IOResult<()> {
 
     message.push(0);
 
-    let port = 14u16;
+    let port = 14u16; // TODO
     message.extend_from_slice(&port.to_be_bytes());
 
     socket.send_to(&message, ("255.255.255.255", PORT)).await?;

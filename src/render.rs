@@ -282,11 +282,15 @@ pub fn ui_messages(app: &App, area: Rect) -> Paragraph<'static> {
 }
 
 pub fn ui_status<'a>(app: &'a App) -> Paragraph<'a> {
+    let style = if app.status.is_error {
+        Style::default().fg(Color::Gray).bg(Color::Red)
+    } else {
+        Style::default()
+    };
     Paragraph::new(Spans::from(vec![
-        Span::styled(
-            &app.status,
-            Style::default().fg(Color::Gray).bg(Color::Red)
-        ).into(),
+        Span::styled(" ", style),
+        Span::styled(&app.status.content, style),
+        Span::styled(" ", style),
         plain(" "),
     ])).alignment(Alignment::Right)
 }
