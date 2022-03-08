@@ -3,10 +3,20 @@ use std::time::Duration;
 use std::sync::mpsc::{Sender, Receiver};
 use tokio::spawn;
 use tokio::time::sleep;
+use tokio::task::{spawn_blocking, JoinHandle};
+// use tokio::sync::mpsc::channel;
 use qp2p::{Config, Endpoint, ConnectionIncoming};
 use crate::network::{FromNet, ToNet, show_error};
 
-pub async fn task_receive(mut to_app: Sender<FromNet>) {
+pub async fn task_p2p(from_app: Receiver<ToNet>, to_app: Sender<FromNet>) {
+    let a = to_app.clone();
+    let handle = start_task_send(from_app, a);
+
+    task_receive(to_app).await;
+    handle.await.expect("task panicked");
+}
+
+async fn task_receive(mut to_app: Sender<FromNet>) {
     loop {
         // TODO: maybe wait until a remote peer is discovered before building the endpoint
         
@@ -41,7 +51,7 @@ pub async fn task_receive(mut to_app: Sender<FromNet>) {
     }
 }
 
-pub async fn task_receive_one(
+async fn task_receive_one(
         to_app: Sender<FromNet>, source: IpAddr, mut incoming: ConnectionIncoming) {
     while let Some(bytes) = incoming.next().await.unwrap() {
         if let Err(_) = to_app.send(FromNet::ShowMessage {
@@ -53,26 +63,53 @@ pub async fn task_receive_one(
     }
 }
 
-pub async fn task_blocking_send(to_app: Sender<FromNet>, from_app: Receiver<ToNet>) {
-    while let Ok(command) = from_app.recv() {
-        match command {
-            ToNet::Send {message_id, address, content} => {
-                // address: IpAddr,
+fn start_task_send(from_app: Receiver<ToNet>, to_app: Sender<FromNet>) -> JoinHandle<()> {
+    // let (tx, mut rx) = channel(32);
 
-                // let connection = ??? <-- address
-                // if let Err(error) = connection.send(Bytes::from(content)).await {
-                //     if !show_error(&mut to_app, format!("error: {:?}", error)) {
-                //         return;
-                //     }
-                //     if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
-                //         return;
-                //     }
-                // } else {
-                //     if let Err(_) = to_app.send(FromNet::SendArrived(message_id)) {
-                //         return;
-                //     }
-                // }
-            }
+    spawn_blocking(move || {
+        while let Ok(command) = from_app.recv() {
+            let to_app = to_app.clone();
+            spawn(async move {
+                match command {
+                    ToNet::Send {message_id, address, content} => {
+                        if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
+                            // not necessary to bubble up exit signal because from_app will be
+                            // dropped too
+                            return;
+                        }
+                    }
+                }
+            });
         }
-    }
+    })
+    // task.await.expect("task panicked");
+
+    // loop {
+    //     // let from_app = from_app.clone();
+    //     // let r = .await.expect("task panicked");
+
+    //     // let command = match r {
+    //     //     Err(RecvError) => return,
+    //     //     Ok(a) => a,
+    //     // };
+    //     match command {
+    //         ToNet::Send {message_id, address, content} => {
+    //             // address: IpAddr,
+
+    //             // let connection = ??? <-- address
+    //             // if let Err(error) = connection.send(Bytes::from(content)).await {
+    //             //     if !show_error(&mut to_app, format!("error: {:?}", error)) {
+    //             //         return;
+    //             //     }
+    //             //     if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
+    //             //         return;
+    //             //     }
+    //             // } else {
+    //             //     if let Err(_) = to_app.send(FromNet::SendArrived(message_id)) {
+    //             //         return;
+    //             //     }
+    //             // }
+    //         }
+    //     }
+    // }
 }

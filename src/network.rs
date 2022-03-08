@@ -8,7 +8,7 @@ use tokio::time::sleep;
 use tokio::spawn;
 use crate::data::{App, LANIOState};
 use crate::network_broadcast::task_ping;
-use crate::network_p2p::task_receive;
+use crate::network_p2p::task_p2p;
 
 // struct LANInternal {
 //     socket: Option<UdpSocket>,
@@ -111,7 +111,7 @@ fn start_network(app: &mut App) {
     app.lan_io = Some(LANIOState {to_lan, from_lan});
 }
 
-fn run_network(_from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>) {
+fn run_network(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>) {
     if !show_status(&mut to_app, "starting runtime") {
         return;
     }
@@ -127,10 +127,11 @@ fn run_network(_from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>) {
 
                 let a = spawn(task_local_name(to_app.clone()));
                 let b = spawn(task_ping(to_app.clone()));
-                let c = spawn(task_receive(to_app.clone()));
-                a.await.expect("task panicked");
-                b.await.expect("task panicked");
-                c.await.expect("task panicked");
+                let c = spawn(task_p2p(from_app, to_app.clone()));
+
+                for r in [a, b, c] {
+                    r.await.expect("task panicked");
+                }
             });
         }
         Err(error) => {
