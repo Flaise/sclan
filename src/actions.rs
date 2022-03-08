@@ -8,6 +8,8 @@ use crate::data::{App, InputMode, now_fmt, Message, MessageType, set_status, Pee
 use crate::network::{ToNet, message_to_net, message_from_net, FromNet};
 
 pub fn input_async(app: &mut App) {
+    // TODO: cull idle peers
+
     while let Some(message) = message_from_net(app) {
         match message {
             FromNet::ShowStatus(content) => set_status(app, false, content),

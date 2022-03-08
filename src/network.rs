@@ -8,6 +8,7 @@ use tokio::time::sleep;
 use tokio::spawn;
 use crate::data::{App, LANIOState};
 use crate::network_broadcast::task_ping;
+use crate::network_p2p::task_receive;
 
 // struct LANInternal {
 //     socket: Option<UdpSocket>,
@@ -71,7 +72,7 @@ pub fn message_from_net(app: &mut App) -> Option<FromNet> {
             }
         }
     } else {
-        debug_assert!(false, "should be unreachable");
+        // This happens if the thread couldn't start.
         None
     }
 }
@@ -126,10 +127,10 @@ fn run_network(_from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>) {
 
                 let a = spawn(task_local_name(to_app.clone()));
                 let b = spawn(task_ping(to_app.clone()));
-                // let c = spawn(task_receive(to_app.clone()));
+                let c = spawn(task_receive(to_app.clone()));
                 a.await.expect("task panicked");
                 b.await.expect("task panicked");
-                // c.await.expect("task panicked");
+                c.await.expect("task panicked");
             });
         }
         Err(error) => {

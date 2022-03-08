@@ -1,6 +1,7 @@
 mod data;
 mod network;
 mod network_broadcast;
+mod network_p2p;
 mod render;
 mod layout;
 mod actions;
@@ -74,8 +75,6 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<(), B
 
     loop {
         input_async(app);
-
-        // TODO: cull idle client
 
         if app.needs_redraw {
             app.needs_redraw = false;
