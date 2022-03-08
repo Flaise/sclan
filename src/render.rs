@@ -26,6 +26,11 @@ where T: Into<Cow<'a, str>> {
     Span::styled(message, Style::default().add_modifier(Modifier::REVERSED))
 }
 
+fn faded<'a, T>(message: T) -> Span<'a>
+where T: Into<Cow<'a, str>> {
+    Span::styled(message, Style::default().fg(Color::DarkGray))
+}
+
 // fn ui_scrollbar(width: u16, position: u16, count: u16) -> Spans<'static> {
 //     let mut bar = vec![];
 //     for i in 0..width {
@@ -66,7 +71,7 @@ pub fn ui_scrolling_list(area: Rect, title: &str, selection: &str, options: &[St
     }
 
     if options.len() == 0 {
-        lines.push(Spans::from(" (searching...) "));
+        lines.push(Spans::from(faded(" (searching...) ")));
     }
 
     while lines.len() < max_options {
@@ -179,7 +184,11 @@ pub fn ui_info<'a>(app: &'a App) -> Paragraph<'a> {
         Spans::from("computer name:"),
         Spans::from(bold(&app.lan.local_name)),
         Spans::from("internal address:"),
-        Spans::from(bold(&app.lan.local_addr)),
+        if app.lan.local_addr.len() > 0 {
+            Spans::from(bold(&app.lan.local_addr))
+        } else {
+            Spans::from(faded("(not connected)"))
+        },
     ])
 }
 
