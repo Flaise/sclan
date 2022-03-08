@@ -21,6 +21,12 @@ const PORT: u16 = 31331;
 //     from_app: Receiver<ToNet>,
 // }
 
+                // let state = Arc::new(LANInternal {
+                //     socket: None,
+                //     to_app,
+                //     from_app,
+                // });
+
 pub enum FromNet {
     ShowLocalName(String),
     ShowLocalAddress(String),
@@ -104,12 +110,6 @@ fn run_network(_from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>) {
                 if !show_status(&mut to_app, "runtime started") {
                     return;
                 }
-
-                // let state = Arc::new(LANInternal {
-                //     socket: None,
-                //     to_app,
-                //     from_app,
-                // });
 
                 let a = spawn(task_local_name(to_app.clone()));
                 let b = spawn(task_ping(to_app.clone()));
@@ -206,7 +206,9 @@ async fn task_ping_in(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>) -> Pi
 
 async fn task_ping_out(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>) -> PingDone {
     loop {
-        if let Err(error) = send_ping(&socket, "uh?").await {//&app.lan.local_name) {
+        let name = gethostname().into_string().unwrap_or("???".into());
+
+        if let Err(error) = send_ping(&socket, &name).await {
             if !show_status(&mut to_app, format!("ping error: {:?}", error)) {
                 return PingDone::Exiting;
             }
@@ -216,16 +218,6 @@ async fn task_ping_out(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>) -> P
         sleep(Duration::from_secs(2)).await;
     }
 }
-
-// async fn task_local_ip(to_app: Sender<FromNet>) {
-//     loop {
-//         let name = gethostname().into_string().unwrap_or("???".into());
-//         if let Err(_) = to_app.send(FromNet::ShowLocalName(name)) {
-//             return;
-//         }
-//         sleep(Duration::from_secs(5)).await;
-//     }
-// }
 
 fn local_ip() -> Option<IpAddr> {
     let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
