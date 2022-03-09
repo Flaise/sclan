@@ -17,6 +17,8 @@ struct PeerKnown {
 
 pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
         send_port: WSender<Option<u16>>, mut receive_peer: TReceiver<SocketAddr>) {
+
+    let mut peers_known = Vec::<PeerKnown>::new();
     let mut commands = pull_commands(from_app);
     'restart: loop {
         // TODO: maybe wait until a remote peer is discovered before building the endpoint
@@ -27,9 +29,10 @@ pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
         
         let ep = Endpoint::new_peer(
             SocketAddr::from(([0, 0, 0, 0], 0)),
-            &[], // TODO: can put broadcast peer list here, maybe
+            &peers_known
+                .iter().map(|r| r.address).collect::<Vec<_>>(),
             Config {
-                idle_timeout: Duration::from_secs(60 * 60).into(), // 1 hour idle timeout.
+                idle_timeout: Some(Duration::from_secs(60 * 5)),
                 ..Default::default()
             },
         ).await;
@@ -52,11 +55,10 @@ pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
 
 
         let mut connections = Vec::<Connection>::new();
-        let mut peers_known = Vec::<PeerKnown>::new();
         loop {
             select! {
                 // TODO: remove idle peers
-                
+
                 command = commands.recv() => {
                     let command = if let Some(a) = command {
                         a
