@@ -72,8 +72,9 @@ pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
                         return;
                     };
 
-                    on_command(&mut to_app, &connections, command).await;
+                    on_command(&mut to_app, &node, &mut connections, &peers_known, command).await;
                 }
+                
                 peer = receive_peer.recv() => {
                     let peer = if let Some(a) = peer {
                         a
@@ -83,6 +84,7 @@ pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
 
                     on_peer(&mut peers_known, peer);
                 }
+
                 arrival = incoming_conns.next() => {
                     let (connection, incoming_messages) = if let Some(a) = arrival {
                         a
@@ -130,7 +132,8 @@ fn pull_commands(from_app: Receiver<ToNet>) -> TReceiver<ToNet> {
     commands
 }
 
-async fn on_command(to_app: &mut Sender<FromNet>, connections: &[Connection], command: ToNet) {        
+async fn on_command(to_app: &mut Sender<FromNet>, node: &Endpoint,
+        connections: &mut Vec<Connection>, peers: &[PeerKnown], command: ToNet) {
     match command {
         ToNet::Send {message_id, address, content} => {
             let found = connections
@@ -148,17 +151,35 @@ async fn on_command(to_app: &mut Sender<FromNet>, connections: &[Connection], co
                         return;
                     }
                 }
-            } else {
+                return;
+            }
 
-                // let (conn, mut incoming) = node.connect_to(&peer).await?;
-                // conn.send(msg.clone()).await?;
+            let found = peers
+                .iter().find(|r| r.address.ip() == address);
+            if let Some(peer) = found {
+                let (conn, incoming_messages) =
+                    node.connect_to(&peer.address).await.unwrap();//?;
 
-                if !show_error(to_app, format!("error: no connection to {}", address)) {
+
+                conn.send(content.into()).await.unwrap();//?;
+
+
+                on_connection(connections, conn);
+                spawn(task_receive_one(to_app.clone(), peer.address.ip(), incoming_messages));
+
+                if let Err(_) = to_app.send(FromNet::SendArrived(message_id)) {
                     return;
                 }
-                if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
-                    return;
-                }
+
+                return;
+            }
+
+
+            if !show_error(to_app, format!("error: no connection to {}", address)) {
+                return;
+            }
+            if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
+                return;
             }
         }
     }
