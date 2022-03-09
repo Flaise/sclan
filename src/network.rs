@@ -6,6 +6,7 @@ use gethostname::gethostname;
 use tokio::runtime::Builder as RuntimeBuilder;
 use tokio::time::sleep;
 use tokio::spawn;
+use tokio::sync::watch::channel as wchannel;
 use crate::data::{App, LANIOState};
 use crate::network_broadcast::task_ping;
 use crate::network_p2p::task_p2p;
@@ -125,9 +126,11 @@ fn run_network(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>) {
                     return;
                 }
 
+                let (send_port, watch_port) = wchannel(None);
+
                 let a = spawn(task_local_name(to_app.clone()));
-                let b = spawn(task_ping(to_app.clone()));
-                let c = spawn(task_p2p(from_app, to_app.clone()));
+                let b = spawn(task_ping(to_app.clone(), watch_port));
+                let c = spawn(task_p2p(from_app, to_app.clone(), send_port));
 
                 for r in [a, b, c] {
                     r.await.expect("task panicked");

@@ -1,6 +1,6 @@
 use std::str::from_utf8;
 use std::cmp::min;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,12 +8,13 @@ use std::io::{Error as IOError, Result as IOResult, ErrorKind};
 use tokio::net::UdpSocket;
 use tokio::time::sleep;
 use tokio::select;
+use tokio::sync::watch::Receiver as WReceiver;
 use gethostname::gethostname;
 use crate::network::{show_status, show_error, FromNet};
 
 const PORT: u16 = 31331;
 
-pub async fn task_ping(mut to_app: Sender<FromNet>) {
+pub async fn task_ping(mut to_app: Sender<FromNet>, wport: WReceiver<Option<u16>>) {
     loop {
         let socket = match make_socket().await {
             Err(error) => {
@@ -39,7 +40,7 @@ pub async fn task_ping(mut to_app: Sender<FromNet>) {
         }
         show_local_ip(&mut to_app);
 
-        let pout = task_ping_out(socket.clone(), to_app.clone());
+        let pout = task_ping_out(socket.clone(), to_app.clone(), wport.clone());
         let pin = task_ping_in(socket, to_app.clone());
 
         let done = select! {
@@ -83,7 +84,7 @@ async fn task_ping_in(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>) -> Pi
 
         let message = &buf[..count];
 
-        let (name, _port) = if let Some(a) = parse_ping(message) {
+        let (name, port) = if let Some(a) = parse_ping(message) {
             a
         } else {
             if !show_status(to_app, format!("invalid ping from {:?}", source)) {
@@ -94,26 +95,53 @@ async fn task_ping_in(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>) -> Pi
 
         let peer = FromNet::Peer {
             name: name.to_string(),
-            address: source.ip(),
+            address: ip,
         };
         if let Err(_) = to_app.send(peer) {
             return PingDone::Exiting;
         }
+
+        let peer_addr = SocketAddr::from((ip, port));
     }
 }
 
-async fn task_ping_out(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>) -> PingDone {
+// /// Returns None if the other end of the watch channel is dropped.
+// async fn extract_some<T>(watching: WReceiver<Option<T>>) -> Option<T> {
+//     loop {
+//         if let Some(val) = watching.borrow() {
+//             return Some(val);
+//         }
+//         if let Err(_) = watching.changed().await {
+//             return None;
+//         }
+//     }
+// }
+
+async fn task_ping_out(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>,
+        mut wport: WReceiver<Option<u16>>) -> PingDone {
     loop {
         let name = gethostname().into_string().unwrap_or("???".into());
 
-        if let Err(error) = send_ping(&socket, &name).await {
+        let port = loop {
+            let val = *wport.borrow();
+            match val {
+                Some(a) => break a,
+                None => {
+                    if let Err(_) = wport.changed().await {
+                        return PingDone::Exiting;
+                    }
+                }
+            }
+        };
+
+        if let Err(error) = send_ping(&socket, &name, port).await {
             if !show_error(&mut to_app, format!("ping error: {:?}", error)) {
                 return PingDone::Exiting;
             }
             return PingDone::IO(error);
         }
 
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(4)).await;
     }
 }
 
@@ -123,14 +151,13 @@ async fn make_socket() -> IOResult<UdpSocket> {
     Ok(socket)
 }
 
-async fn send_ping(socket: &Arc<UdpSocket>, local_name: &str) -> IOResult<()> {
+async fn send_ping(socket: &Arc<UdpSocket>, local_name: &str, port: u16) -> IOResult<()> {
     let len = min(local_name.len(), u8::max_value() as usize);
     let mut message = vec![len as u8];
     message.extend_from_slice(&local_name.as_bytes()[0..len]);
 
     message.push(0);
 
-    let port = 14u16; // TODO
     message.extend_from_slice(&port.to_be_bytes());
 
     socket.send_to(&message, ("255.255.255.255", PORT)).await?;

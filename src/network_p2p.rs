@@ -6,22 +6,36 @@ use tokio::time::sleep;
 use tokio::task::spawn_blocking;
 use tokio::sync::mpsc::{channel, Sender as TSender, Receiver as TReceiver};
 use tokio::runtime::Handle;
+// use tokio::sync::watch::Receiver as WReceiver;
+use tokio::sync::watch::Sender as WSender;
 use qp2p::{Config, Endpoint, ConnectionIncoming, Connection};
 use crate::network::{FromNet, ToNet, show_error};
 
-pub async fn task_p2p(from_app: Receiver<ToNet>, to_app: Sender<FromNet>) {
+
+// struct PeerKnown {
+//     address: SocketAddr,
+//     last_seen: Instant,
+// }
+
+pub async fn task_p2p(from_app: Receiver<ToNet>, to_app: Sender<FromNet>,
+        sport: WSender<Option<u16>>) {
     let (to_output, connecting) = channel(1);
 
     let a = to_app.clone();
     let handle = spawn(task_send(from_app, a, connecting));
 
-    task_receive(to_app, to_output).await;
+    task_receive(to_app, to_output, sport).await;
     handle.await.expect("task panicked");
 }
 
-async fn task_receive(mut to_app: Sender<FromNet>, to_output: TSender<Connection>) {
+async fn task_receive(mut to_app: Sender<FromNet>, to_output: TSender<Connection>,
+        sport: WSender<Option<u16>>) {
     loop {
         // TODO: maybe wait until a remote peer is discovered before building the endpoint
+
+        if let Err(_) = sport.send(None) {
+            return;
+        }
         
         let ep = Endpoint::new_peer(
             SocketAddr::from(([0, 0, 0, 0], 0)),
@@ -32,7 +46,7 @@ async fn task_receive(mut to_app: Sender<FromNet>, to_output: TSender<Connection
             },
         ).await;
 
-        let (_node, mut incoming_conns, _contact) = match ep {
+        let (node, mut incoming_conns, _contact) = match ep {
             Ok(a) => a,
             Err(error) => {
                 if !show_error(&mut to_app, format!("error: {:?}", error)) {
@@ -43,6 +57,11 @@ async fn task_receive(mut to_app: Sender<FromNet>, to_output: TSender<Connection
                 continue;
             }
         };
+
+        let port = node.public_addr().port();
+        if let Err(_) = sport.send(Some(port)) {
+            return;
+        }
 
         while let Some((connection, incoming_messages)) = incoming_conns.next().await {
             let source = connection.remote_address().ip();
@@ -112,6 +131,10 @@ async fn task_send(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
                                 }
                             }
                         } else {
+
+                            // let (conn, mut incoming) = node.connect_to(&peer).await?;
+                            // conn.send(msg.clone()).await?;
+
                             if !show_error(&mut to_app,
                                     format!("error: no connection to {}", address)) {
                                 return;
