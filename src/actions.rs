@@ -180,11 +180,17 @@ fn show_error(app: &mut App, content: String) {
     });
 }
 
-fn show_message(app: &mut App, source: IpAddr, content: String) {
+fn show_message(app: &mut App, address: IpAddr, content: String) {
+    let name = if let Some(peer) = app.lan.peers.iter_mut().find(|a| a.address == address) {
+        peer.name.clone()
+    } else {
+        address.to_string()
+    };
+
     app.messages.push(Message {
         timestamp: now_fmt(),
         direction: MessageType::Received,
-        name: source.to_string(), // TODO: search for source in peer list
+        name,
         // TODO: update old messages when a peer becomes named
         // TODO: maybe also save source address so they can RE-name with the peer
         content,
