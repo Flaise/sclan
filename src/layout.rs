@@ -27,7 +27,7 @@ fn calc_layout(base: Rect) -> Cells {
 
     let side = Layout::default()
         .constraints([
-            Constraint::Length(5),
+            Constraint::Length(7),
             Constraint::Min(3),
             Constraint::Length(8),
         ])

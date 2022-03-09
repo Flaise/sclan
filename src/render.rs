@@ -181,6 +181,13 @@ pub fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
 
 pub fn ui_info<'a>(app: &'a App) -> Paragraph<'a> {
     Paragraph::new(vec![
+        Spans::from(vec![
+            bold("SCLAN"),
+            plain(" "),
+            plain(env!("CARGO_PKG_VERSION")),
+        ]),
+        Spans::default(),
+
         Spans::from("computer name:"),
         if app.lan.local_name.len() > 0 {
             Spans::from(bold(&app.lan.local_name))
