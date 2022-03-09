@@ -91,7 +91,34 @@ async fn task_receive_one(
 async fn task_send(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
         mut connecting: TReceiver<Connection>) {
 
-    let (to_outer, mut commands) = channel(1);
+    let mut commands = pull_commands(from_app);
+    let mut connections = Vec::<Connection>::new();
+    loop {
+        select! {
+            command = commands.recv() => {
+                let command = if let Some(a) = command {
+                    a
+                } else {
+                    break;
+                };
+                on_command(&mut to_app, &connections, command).await;
+            }
+            connection = connecting.recv() => {
+                let connection = if let Some(a) = connection {
+                    a
+                } else {
+                    break;
+                };
+                on_connection(&mut connections, connection);
+            }
+        }
+    }
+}
+
+fn pull_commands(from_app: Receiver<ToNet>) -> TReceiver<ToNet> {
+    // TODO: Can the tokio channel be directly used from the main thread?
+
+    let (to_outer, commands) = channel(1);
 
     spawn_blocking(move || {
         while let Ok(command) = from_app.recv() {
@@ -103,67 +130,53 @@ async fn task_send(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
         }
     });
 
-    let mut connections = Vec::<Connection>::new();
-    loop {
-        select! {
-            command = commands.recv() => {
-                let command = if let Some(a) = command {
-                    a
+    commands
+}
+
+async fn on_command(to_app: &mut Sender<FromNet>, connections: &[Connection], command: ToNet) {        
+    match command {
+        ToNet::Send {message_id, address, content} => {
+            let found = connections
+                .iter().find(|r| r.remote_address().ip() == address);
+            if let Some(dest) = found {
+                if let Err(error) = dest.send(content.into()).await {
+                    if !show_error(to_app, format!("error: {:?}", error)) {
+                        return;
+                    }
+                    if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
+                        return;
+                    }
                 } else {
-                    break;
-                };
-                
-                match command {
-                    ToNet::Send {message_id, address, content} => {
-                        let found = connections
-                            .iter().find(|r| r.remote_address().ip() == address);
-                        if let Some(dest) = found {
-                            if let Err(error) = dest.send(content.into()).await {
-                                if !show_error(&mut to_app, format!("error: {:?}", error)) {
-                                    return;
-                                }
-                                if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
-                                    return;
-                                }
-                            } else {
-                                if let Err(_) = to_app.send(FromNet::SendArrived(message_id)) {
-                                    return;
-                                }
-                            }
-                        } else {
-
-                            // let (conn, mut incoming) = node.connect_to(&peer).await?;
-                            // conn.send(msg.clone()).await?;
-
-                            if !show_error(&mut to_app,
-                                    format!("error: no connection to {}", address)) {
-                                return;
-                            }
-                            if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
-                                return;
-                            }
-                        }
+                    if let Err(_) = to_app.send(FromNet::SendArrived(message_id)) {
+                        return;
                     }
                 }
-            }
-            connection = connecting.recv() => {
-                let connection = if let Some(a) = connection {
-                    a
-                } else {
-                    break;
-                };
+            } else {
 
-                let ip = connection.remote_address().ip();
+                // let (conn, mut incoming) = node.connect_to(&peer).await?;
+                // conn.send(msg.clone()).await?;
 
-                if let Some(index) = connections
-                        .iter().position(|r| r.remote_address().ip() == ip) {
-                    // TODO: will this ever happen or does qp2p keep track?
-                    connections[index].close(None);
-                    connections[index] = connection;
-                } else {
-                    connections.push(connection);
+                if !show_error(to_app,
+                        format!("error: no connection to {}", address)) {
+                    return;
+                }
+                if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
+                    return;
                 }
             }
         }
+    }
+}
+
+fn on_connection(connections: &mut Vec<Connection>, connection: Connection) {
+    let ip = connection.remote_address().ip();
+
+    if let Some(index) = connections
+            .iter().position(|r| r.remote_address().ip() == ip) {
+        // TODO: will this ever happen or does qp2p keep track?
+        connections[index].close(None);
+        connections[index] = connection;
+    } else {
+        connections.push(connection);
     }
 }
