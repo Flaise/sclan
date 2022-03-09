@@ -1,14 +1,16 @@
 use std::net::{SocketAddr, IpAddr};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use std::sync::mpsc::{Sender, Receiver};
 use tokio::{spawn, select};
-use tokio::time::sleep;
+use tokio::time::{sleep, interval, MissedTickBehavior, Instant};
 use tokio::task::spawn_blocking;
 use tokio::sync::mpsc::{channel, Receiver as TReceiver};
 use tokio::runtime::Handle;
 use tokio::sync::watch::Sender as WSender;
 use qp2p::{Config, Endpoint, ConnectionIncoming, Connection};
 use crate::network::{FromNet, ToNet, show_error};
+
+const PEER_IDLE_TIME: Duration = Duration::from_secs(10);
 
 struct PeerKnown {
     address: SocketAddr,
@@ -53,11 +55,15 @@ pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
             return;
         }
 
+        let mut interval = interval(Duration::from_secs(5));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         let mut connections = Vec::<Connection>::new();
         loop {
             select! {
-                // TODO: remove idle peers
+                now = interval.tick() => {
+                    cull_peers(&mut peers_known, now);
+                }
 
                 command = commands.recv() => {
                     let command = if let Some(a) = command {
@@ -156,6 +162,10 @@ async fn on_command(to_app: &mut Sender<FromNet>, connections: &[Connection], co
             }
         }
     }
+}
+
+fn cull_peers(peers_known: &mut Vec<PeerKnown>, now: Instant) {
+    peers_known.retain(|r| now.duration_since(r.last_seen) < PEER_IDLE_TIME);
 }
 
 fn on_peer(peers_known: &mut Vec<PeerKnown>, address: SocketAddr) {
