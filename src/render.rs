@@ -209,21 +209,21 @@ fn message_heading(message: &Message) -> Spans<'static> {
     match message.direction {
         MessageType::Sent => {
             heading.push(bold("→"));
-            heading.push(plain(" to     "));
+            heading.push(plain(" to    "));
         }
         MessageType::Sending => {
             heading.push(bold("→"));
-            heading.push(plain(" ...    "));
+            heading.push(plain(" ...   "));
         }
         MessageType::SendFailed => {
-            heading.push(bold("→ failed "));
+            heading.push(bold("→ x     "));
         }
         MessageType::Received => {
             heading.push(bold("←"));
-            heading.push(plain(" from   "));
+            heading.push(plain(" from  "));
         }
         MessageType::Error => {
-            heading.push(bold("x error  "));
+            heading.push(bold("x error "));
         }
     }
 

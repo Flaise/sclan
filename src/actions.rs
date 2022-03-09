@@ -133,6 +133,8 @@ pub fn input_terminal(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Er
 
         (InputMode::Editing, KeyCode::Enter, _) => {
             if app.input.trim().len() > 0 {
+                set_status(app, false, "");
+
                 let content = take(&mut app.input);
                 send(app, content);
             } else {
