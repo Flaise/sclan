@@ -1,36 +1,24 @@
 use std::net::{SocketAddr, IpAddr};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::sync::mpsc::{Sender, Receiver};
 use tokio::{spawn, select};
 use tokio::time::sleep;
 use tokio::task::spawn_blocking;
-use tokio::sync::mpsc::{channel, Sender as TSender, Receiver as TReceiver};
+use tokio::sync::mpsc::{channel, Receiver as TReceiver};
 use tokio::runtime::Handle;
-// use tokio::sync::watch::Receiver as WReceiver;
 use tokio::sync::watch::Sender as WSender;
 use qp2p::{Config, Endpoint, ConnectionIncoming, Connection};
 use crate::network::{FromNet, ToNet, show_error};
 
-
-// struct PeerKnown {
-//     address: SocketAddr,
-//     last_seen: Instant,
-// }
-
-pub async fn task_p2p(from_app: Receiver<ToNet>, to_app: Sender<FromNet>,
-        send_port: WSender<Option<u16>>, receive_peer: TReceiver<SocketAddr>) {
-    let (to_output, connecting) = channel(1);
-
-    let a = to_app.clone();
-    let handle = spawn(task_send(from_app, a, connecting));
-
-    task_receive(to_app, to_output, send_port).await;
-    handle.await.expect("task panicked");
+struct PeerKnown {
+    address: SocketAddr,
+    last_seen: Instant,
 }
 
-async fn task_receive(mut to_app: Sender<FromNet>, to_output: TSender<Connection>,
-        send_port: WSender<Option<u16>>) {
-    loop {
+pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
+        send_port: WSender<Option<u16>>, mut receive_peer: TReceiver<SocketAddr>) {
+    let mut commands = pull_commands(from_app);
+    'restart: loop {
         // TODO: maybe wait until a remote peer is discovered before building the endpoint
 
         if let Err(_) = send_port.send(None) {
@@ -57,20 +45,48 @@ async fn task_receive(mut to_app: Sender<FromNet>, to_output: TSender<Connection
                 continue;
             }
         };
-
         let port = node.public_addr().port();
         if let Err(_) = send_port.send(Some(port)) {
             return;
         }
 
-        while let Some((connection, incoming_messages)) = incoming_conns.next().await {
-            let source = connection.remote_address().ip();
 
-            spawn(task_receive_one(to_app.clone(), source, incoming_messages));
+        let mut connections = Vec::<Connection>::new();
+        let mut peers_known = Vec::<PeerKnown>::new();
+        loop {
+            select! {
+                // TODO: remove idle peers
+                
+                command = commands.recv() => {
+                    let command = if let Some(a) = command {
+                        a
+                    } else {
+                        return;
+                    };
 
-            if let Err(_) = to_output.send(connection).await {
-                // output task exited
-                return;
+                    on_command(&mut to_app, &connections, command).await;
+                }
+                peer = receive_peer.recv() => {
+                    let peer = if let Some(a) = peer {
+                        a
+                    } else {
+                        return;
+                    };
+
+                    on_peer(&mut peers_known, peer);
+                }
+                arrival = incoming_conns.next() => {
+                    let (connection, incoming_messages) = if let Some(a) = arrival {
+                        a
+                    } else {
+                        sleep(Duration::from_secs(5)).await;
+                        continue 'restart;
+                    };
+
+                    let source = connection.remote_address().ip();
+                    on_connection(&mut connections, connection);
+                    spawn(task_receive_one(to_app.clone(), source, incoming_messages));
+                }
             }
         }
     }
@@ -88,35 +104,8 @@ async fn task_receive_one(
     }
 }
 
-async fn task_send(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
-        mut connecting: TReceiver<Connection>) {
-
-    let mut commands = pull_commands(from_app);
-    let mut connections = Vec::<Connection>::new();
-    loop {
-        select! {
-            command = commands.recv() => {
-                let command = if let Some(a) = command {
-                    a
-                } else {
-                    break;
-                };
-                on_command(&mut to_app, &connections, command).await;
-            }
-            connection = connecting.recv() => {
-                let connection = if let Some(a) = connection {
-                    a
-                } else {
-                    break;
-                };
-                on_connection(&mut connections, connection);
-            }
-        }
-    }
-}
-
 fn pull_commands(from_app: Receiver<ToNet>) -> TReceiver<ToNet> {
-    // TODO: Can the tokio channel be directly used from the main thread?
+    // TODO: Can a tokio channel be directly used from the main thread?
 
     let (to_outer, commands) = channel(1);
 
@@ -156,8 +145,7 @@ async fn on_command(to_app: &mut Sender<FromNet>, connections: &[Connection], co
                 // let (conn, mut incoming) = node.connect_to(&peer).await?;
                 // conn.send(msg.clone()).await?;
 
-                if !show_error(to_app,
-                        format!("error: no connection to {}", address)) {
+                if !show_error(to_app, format!("error: no connection to {}", address)) {
                     return;
                 }
                 if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
@@ -165,6 +153,20 @@ async fn on_command(to_app: &mut Sender<FromNet>, connections: &[Connection], co
                 }
             }
         }
+    }
+}
+
+fn on_peer(peers_known: &mut Vec<PeerKnown>, address: SocketAddr) {
+    let ip = address.ip();
+
+    if let Some(index) = peers_known
+            .iter().position(|r| r.address.ip() == ip) {
+        peers_known[index].last_seen = Instant::now();
+    } else {
+        peers_known.push(PeerKnown {
+            address,
+            last_seen: Instant::now(),
+        });
     }
 }
 
