@@ -119,23 +119,3 @@ pub fn now_fmt() -> String {
         Err(_) => "<time zone error>".to_string(),
     }
 }
-
-pub fn sent(name: String, content: String) -> Message {
-    Message {
-        timestamp: now_fmt(),
-        direction: MessageType::Sent,
-        name,
-        content,
-        message_id: 0,
-    }
-}
-
-pub fn received(name: String, content: String) -> Message {
-    Message {
-        timestamp: now_fmt(),
-        direction: MessageType::Received,
-        name,
-        content,
-        message_id: 0,
-    }
-}

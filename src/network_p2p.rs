@@ -187,7 +187,6 @@ async fn on_command(to_app: &mut Sender<FromNet>, node: &Endpoint,
                 return;
             }
 
-
             if !show_error(to_app, format!("error: no connection to {}", address)) {
                 return;
             }
