@@ -91,9 +91,6 @@ async fn task_ping_in(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>) -> Pi
             }
             continue;
         };
-        if !show_status(to_app, format!("received from {:?}", source)) {
-            return PingDone::Exiting;
-        }
 
         let peer = FromNet::Peer {
             name: name.to_string(),
