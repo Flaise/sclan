@@ -18,22 +18,22 @@ use crate::network::{FromNet, ToNet, show_error};
 // }
 
 pub async fn task_p2p(from_app: Receiver<ToNet>, to_app: Sender<FromNet>,
-        sport: WSender<Option<u16>>) {
+        send_port: WSender<Option<u16>>, receive_peer: TReceiver<SocketAddr>) {
     let (to_output, connecting) = channel(1);
 
     let a = to_app.clone();
     let handle = spawn(task_send(from_app, a, connecting));
 
-    task_receive(to_app, to_output, sport).await;
+    task_receive(to_app, to_output, send_port).await;
     handle.await.expect("task panicked");
 }
 
 async fn task_receive(mut to_app: Sender<FromNet>, to_output: TSender<Connection>,
-        sport: WSender<Option<u16>>) {
+        send_port: WSender<Option<u16>>) {
     loop {
         // TODO: maybe wait until a remote peer is discovered before building the endpoint
 
-        if let Err(_) = sport.send(None) {
+        if let Err(_) = send_port.send(None) {
             return;
         }
         
@@ -59,7 +59,7 @@ async fn task_receive(mut to_app: Sender<FromNet>, to_output: TSender<Connection
         };
 
         let port = node.public_addr().port();
-        if let Err(_) = sport.send(Some(port)) {
+        if let Err(_) = send_port.send(Some(port)) {
             return;
         }
 

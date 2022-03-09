@@ -9,12 +9,14 @@ use tokio::net::UdpSocket;
 use tokio::time::sleep;
 use tokio::select;
 use tokio::sync::watch::Receiver as WReceiver;
+use tokio::sync::mpsc::Sender as TSender;
 use gethostname::gethostname;
 use crate::network::{show_status, show_error, FromNet};
 
 const PORT: u16 = 31331;
 
-pub async fn task_ping(mut to_app: Sender<FromNet>, wport: WReceiver<Option<u16>>) {
+pub async fn task_ping(mut to_app: Sender<FromNet>, wport: WReceiver<Option<u16>>,
+        to_p2p: TSender<SocketAddr>) {
     loop {
         let socket = match make_socket().await {
             Err(error) => {
@@ -41,7 +43,7 @@ pub async fn task_ping(mut to_app: Sender<FromNet>, wport: WReceiver<Option<u16>
         show_local_ip(&mut to_app);
 
         let pout = task_ping_out(socket.clone(), to_app.clone(), wport.clone());
-        let pin = task_ping_in(socket, to_app.clone());
+        let pin = task_ping_in(socket, to_app.clone(), to_p2p.clone());
 
         let done = select! {
             a = pout => a,
@@ -69,7 +71,8 @@ enum PingDone {
     IO(IOError),
 }
 
-async fn task_ping_in(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>) -> PingDone {
+async fn task_ping_in(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>,
+        to_p2p: TSender<SocketAddr>) -> PingDone {
     let to_app = &mut to_app;
     let mut buf = [0; 2048];
     loop {
@@ -102,6 +105,9 @@ async fn task_ping_in(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>) -> Pi
         }
 
         let peer_addr = SocketAddr::from((ip, port));
+        if let Err(_) = to_p2p.send(peer_addr).await {
+            return PingDone::Exiting;
+        }
     }
 }
 

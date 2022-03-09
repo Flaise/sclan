@@ -7,21 +7,10 @@ use tokio::runtime::Builder as RuntimeBuilder;
 use tokio::time::sleep;
 use tokio::spawn;
 use tokio::sync::watch::channel as wchannel;
+use tokio::sync::mpsc::channel as tchannel;
 use crate::data::{App, LANIOState};
 use crate::network_broadcast::task_ping;
 use crate::network_p2p::task_p2p;
-
-// struct LANInternal {
-//     socket: Option<UdpSocket>,
-//     to_app: Sender<FromNet>,
-//     from_app: Receiver<ToNet>,
-// }
-
-                // let state = Arc::new(LANInternal {
-                //     socket: None,
-                //     to_app,
-                //     from_app,
-                // });
 
 pub enum FromNet {
     ShowLocalName(String),
@@ -121,25 +110,28 @@ fn run_network(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>) {
         .build();
     match runtime {
         Ok(runtime) => {
-            runtime.block_on(async {
-                if !show_status(&mut to_app, "runtime started") {
-                    return;
-                }
-
-                let (send_port, watch_port) = wchannel(None);
-
-                let a = spawn(task_local_name(to_app.clone()));
-                let b = spawn(task_ping(to_app.clone(), watch_port));
-                let c = spawn(task_p2p(from_app, to_app.clone(), send_port));
-
-                for r in [a, b, c] {
-                    r.await.expect("task panicked");
-                }
-            });
+            runtime.block_on(run_network_async(from_app, to_app));
         }
         Err(error) => {
             let _ignore = show_error(&mut to_app, format!("error building runtime: {:?}", error));
         }
+    }
+}
+
+async fn run_network_async(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>) {
+    if !show_status(&mut to_app, "runtime started") {
+        return;
+    }
+
+    let (send_peer, receive_peer) = tchannel(1);
+    let (send_port, watch_port) = wchannel(None);
+
+    let a = spawn(task_local_name(to_app.clone()));
+    let b = spawn(task_ping(to_app.clone(), watch_port, send_peer));
+    let c = spawn(task_p2p(from_app, to_app.clone(), send_port, receive_peer));
+
+    for r in [a, b, c] {
+        r.await.expect("task panicked");
     }
 }
 
