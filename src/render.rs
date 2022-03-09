@@ -215,18 +215,27 @@ fn message_heading(message: &Message) -> Spans<'static> {
             heading.push(bold("←"));
             heading.push(plain(" from   "));
         }
+        MessageType::Error => {
+            heading.push(bold("x error  "));
+        }
     }
 
     heading.push(bold(message.name.clone()));
 
     let len = 16usize.saturating_sub(message.name.len());
-    heading.push(plain(format!("{:_<len$} {}", "", message.timestamp, len=len)));
+    if message.direction != MessageType::Error {
+        heading.push(plain(format!("{:_<len$} ", "", len=len)));
+    } else {
+        heading.push(plain(format!("{: <len$} ", "", len=len)));
+    }
+    heading.push(plain(message.timestamp.clone()));
 
     let heading_color = match message.direction {
         MessageType::Sent => Color::Yellow,
         MessageType::Sending => Color::DarkGray,
         MessageType::SendFailed => Color::Red,
         MessageType::Received => Color::LightCyan,
+        MessageType::Error => Color::Red,
     };
 
     for span in &mut heading {

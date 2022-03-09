@@ -13,7 +13,10 @@ pub fn input_async(app: &mut App) {
     while let Some(message) = message_from_net(app) {
         match message {
             FromNet::ShowStatus(content) => set_status(app, false, content),
-            FromNet::ShowError(content) => set_status(app, true, content),
+            FromNet::ShowError(content) => {
+                set_status(app, true, &content);
+                show_error(app, content);
+            }
             FromNet::ShowLocalName(name) => app.lan.local_name = name,
             FromNet::ShowLocalAddress(addr) => app.lan.local_addr = addr,
             FromNet::Peer {name, address} => {
@@ -165,6 +168,16 @@ fn update_message(app: &mut App, message_id: u32, new_type: MessageType) {
             return;
         }
     }
+}
+
+fn show_error(app: &mut App, content: String) {
+    app.messages.push(Message {
+        timestamp: now_fmt(),
+        direction: MessageType::Error,
+        name: "".into(),
+        content,
+        message_id: 0,
+    });
 }
 
 fn show_message(app: &mut App, source: IpAddr, content: String) {

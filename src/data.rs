@@ -91,6 +91,7 @@ pub enum MessageType {
     Sending,
     SendFailed,
     Received,
+    Error,
 }
 
 impl Default for MessageType {

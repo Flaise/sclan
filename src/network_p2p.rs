@@ -74,7 +74,7 @@ pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
 
                     on_command(&mut to_app, &node, &mut connections, &peers_known, command).await;
                 }
-                
+
                 peer = receive_peer.recv() => {
                     let peer = if let Some(a) = peer {
                         a
@@ -93,9 +93,7 @@ pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
                         continue 'restart;
                     };
 
-                    let source = connection.remote_address().ip();
-                    on_connection(&mut connections, connection);
-                    spawn(task_receive_one(to_app.clone(), source, incoming_messages));
+                    on_connection(to_app.clone(), &mut connections, connection, incoming_messages);
                 }
             }
         }
@@ -104,7 +102,13 @@ pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
 
 async fn task_receive_one(
         to_app: Sender<FromNet>, source: IpAddr, mut incoming: ConnectionIncoming) {
-    while let Some(bytes) = incoming.next().await.unwrap() {
+    while let Ok(obytes) = incoming.next().await {
+        let bytes = if let Some(a) = obytes {
+            a
+        } else {
+            return;
+        };
+
         if let Err(_) = to_app.send(FromNet::ShowMessage {
             source,
             content: String::from_utf8_lossy(&bytes).into_owned(),
@@ -164,8 +168,7 @@ async fn on_command(to_app: &mut Sender<FromNet>, node: &Endpoint,
                 conn.send(content.into()).await.unwrap();//?;
 
 
-                on_connection(connections, conn);
-                spawn(task_receive_one(to_app.clone(), peer.address.ip(), incoming_messages));
+                on_connection(to_app.clone(), connections, conn, incoming_messages);
 
                 if let Err(_) = to_app.send(FromNet::SendArrived(message_id)) {
                     return;
@@ -203,15 +206,19 @@ fn on_peer(peers_known: &mut Vec<PeerKnown>, address: SocketAddr) {
     }
 }
 
-fn on_connection(connections: &mut Vec<Connection>, connection: Connection) {
+fn on_connection(to_app: Sender<FromNet>, connections: &mut Vec<Connection>,
+        connection: Connection, incoming_messages: ConnectionIncoming) {
     let ip = connection.remote_address().ip();
 
     if let Some(index) = connections
             .iter().position(|r| r.remote_address().ip() == ip) {
-        // TODO: will this ever happen or does qp2p keep track?
-        connections[index].close(None);
+        if connection.remote_address() != connections[index].remote_address() {
+            connections[index].close(Some("connected on new port".into()));
+        }
         connections[index] = connection;
     } else {
         connections.push(connection);
     }
+
+    spawn(task_receive_one(to_app, ip, incoming_messages));
 }
