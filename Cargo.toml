@@ -6,7 +6,7 @@ license = "BSD-3-Clause-Clear"
 keywords = ["network", "utility", "quic", "p2p", "productivity"]
 categories = ["network-programming", "command-line-utilities"]
 repository = "https://github.com/Flaise/sclan"
-readme = "readme.txt"
+readme = "README.md"
 description = "Simple Communication over Local Area Network"
 
 [dependencies]
