@@ -2,6 +2,7 @@ use std::error::Error;
 use std::mem::take;
 use std::time::Duration;
 use std::net::IpAddr;
+use std::cmp::min;
 use crossterm::event::{Event, KeyCode, KeyModifiers, read, poll};
 use clipboard::{ClipboardProvider, ClipboardContext};
 use crate::data::{App, InputMode, now_fmt, Message, MessageType, set_status, Peer};
@@ -18,16 +19,25 @@ pub fn input_async(app: &mut App) {
             FromNet::ShowLocalName(name) => app.lan.local_name = name,
             FromNet::ShowLocalAddress(addr) => app.lan.local_addr = addr,
             FromNet::Peer {name, address} => {
-                // TODO: insert at cursor if same details as app.recipient
-                
                 if let Some(peer) = app.lan.peers.iter_mut().find(|a| a.address == address) {
                     peer.name.clear();
                     peer.name.push_str(&name);
                 } else {
-                    app.lan.peers.push(Peer {
-                        name: name.to_string(),
+                    let peer = Peer {
+                        name: name.clone(),
                         address,
-                    });
+                    };
+
+                    if !app.recipient.valid && app.recipient.peer.name == name
+                    && app.recipient.peer.address == address {
+                        let index = min(app.lan.peers.len(), app.recipient.index);
+                        app.recipient.index = index;
+                        app.recipient.valid = true;
+                        
+                        app.lan.peers.insert(index, peer);
+                    } else {
+                        app.lan.peers.push(peer);
+                    }
                 }
             }
             FromNet::Peerbgone(address) => {
