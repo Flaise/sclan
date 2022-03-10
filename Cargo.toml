@@ -2,6 +2,12 @@
 name = "sclan"
 version = "0.2.0"
 edition = "2021"
+license = "BSD-3-Clause-Clear"
+keywords = ["network", "utility", "quic", "p2p", "productivity"]
+categories = ["network-programming", "command-line-utilities"]
+repository = "https://github.com/Flaise/sclan"
+readme = "readme.txt"
+description = "Simple Communication over Local Area Network"
 
 [dependencies]
 crossterm = "0.22"
@@ -15,3 +21,4 @@ tokio = { version = "1.17.0", features = ["rt", "time", "net", "macros"] }
 
 # 2.32MB straight up to 7.51MB with one dependency...
 qp2p = { version = "0.28.5", default-features = false }
+
