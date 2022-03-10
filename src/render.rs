@@ -142,11 +142,16 @@ pub fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
 pub fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
     let mut input_block = Block::default()
         .borders(Borders::ALL);
-    if !app.recipient.valid {
+    if app.recipient.peer.name.len() == 0 {
         input_block = input_block.title(" Select a recipient. ");
     } else {
+        let address = if app.recipient.valid {
+            app.recipient.peer.address.to_string()
+        } else {
+            "(not available)".into()
+        };
         let send_to = Spans::from(format!(" sending to: {} - {} ",
-            app.recipient.peer.name, app.recipient.peer.address.to_string()));
+            app.recipient.peer.name, address));
         input_block = input_block.title(send_to);
     }
 

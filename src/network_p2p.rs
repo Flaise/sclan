@@ -62,7 +62,7 @@ pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
         loop {
             select! {
                 now = interval.tick() => {
-                    cull_peers(&mut peers_known, now);
+                    cull_peers(&mut to_app, &mut peers_known, now);
                 }
 
                 command = commands.recv() => {
@@ -197,8 +197,15 @@ async fn on_command(to_app: &mut Sender<FromNet>, node: &Endpoint,
     }
 }
 
-fn cull_peers(peers_known: &mut Vec<PeerKnown>, now: Instant) {
-    peers_known.retain(|r| now.duration_since(r.last_seen) < PEER_IDLE_TIME);
+fn cull_peers(to_app: &mut Sender<FromNet>, peers_known: &mut Vec<PeerKnown>, now: Instant) {
+    peers_known.retain(|peer| {
+        if now.duration_since(peer.last_seen) < PEER_IDLE_TIME {
+            true
+        } else {
+            let _ = to_app.send(FromNet::Peerbgone(peer.address.ip()));
+            false
+        }
+    });
 }
 
 fn on_peer(peers_known: &mut Vec<PeerKnown>, address: SocketAddr) {

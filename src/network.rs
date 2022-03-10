@@ -27,6 +27,7 @@ pub enum FromNet {
         name: String,
         address: IpAddr,
     },
+    Peerbgone(IpAddr),
 }
 
 pub enum ToNet {

@@ -8,8 +8,6 @@ use crate::data::{App, InputMode, now_fmt, Message, MessageType, set_status, Pee
 use crate::network::{ToNet, message_to_net, message_from_net, FromNet};
 
 pub fn input_async(app: &mut App) {
-    // TODO: cull idle peers
-
     while let Some(message) = message_from_net(app) {
         match message {
             FromNet::ShowStatus(content) => set_status(app, false, content),
@@ -20,6 +18,8 @@ pub fn input_async(app: &mut App) {
             FromNet::ShowLocalName(name) => app.lan.local_name = name,
             FromNet::ShowLocalAddress(addr) => app.lan.local_addr = addr,
             FromNet::Peer {name, address} => {
+                // TODO: insert at cursor if same details as app.recipient
+                
                 if let Some(peer) = app.lan.peers.iter_mut().find(|a| a.address == address) {
                     peer.name.clear();
                     peer.name.push_str(&name);
@@ -28,6 +28,17 @@ pub fn input_async(app: &mut App) {
                         name: name.to_string(),
                         address,
                     });
+                }
+            }
+            FromNet::Peerbgone(address) => {
+                let found = app.lan.peers
+                    .iter().position(|r| r.address == address);
+                if let Some(index) = found {
+                    if app.recipient.valid && app.recipient.index == index {
+                        app.recipient.valid = false;
+                    }
+
+                    app.lan.peers.remove(index);
                 }
             }
             FromNet::SendFailed(message_id) => {
@@ -132,7 +143,9 @@ pub fn input_terminal(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Er
         }
 
         (InputMode::Editing, KeyCode::Enter, _) => {
-            if app.input.trim().len() > 0 {
+            if !app.recipient.valid {
+                app.input_mode = InputMode::Normal;
+            } else if app.input.trim().len() > 0 {
                 set_status(app, false, "");
 
                 let content = take(&mut app.input);
