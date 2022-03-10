@@ -33,7 +33,7 @@ pub fn input_async(app: &mut App) {
                         let index = min(app.lan.peers.len(), app.recipient.index);
                         app.recipient.index = index;
                         app.recipient.valid = true;
-                        
+
                         app.lan.peers.insert(index, peer);
                     } else {
                         app.lan.peers.push(peer);
@@ -196,8 +196,10 @@ fn update_message(app: &mut App, message_id: u32, new_type: MessageType) {
 }
 
 fn show_error(app: &mut App, content: String) {
+    let timestamp = now_fmt(app);
+
     app.messages.push(Message {
-        timestamp: now_fmt(),
+        timestamp,
         direction: MessageType::Error,
         name: "".into(),
         content,
@@ -212,8 +214,10 @@ fn show_message(app: &mut App, address: IpAddr, content: String) {
         address.to_string()
     };
 
+    let timestamp = now_fmt(app);
+
     app.messages.push(Message {
-        timestamp: now_fmt(),
+        timestamp,
         direction: MessageType::Received,
         name,
         // TODO: update old messages when a peer becomes named
@@ -231,9 +235,10 @@ fn next_message_id(app: &mut App) -> u32 {
 fn send(app: &mut App, content: String) {
     if app.recipient.valid {
         let message_id = next_message_id(app);
+        let timestamp = now_fmt(app);
 
         app.messages.push(Message {
-            timestamp: now_fmt(),
+            timestamp,
             direction: MessageType::Sending,
             name: app.recipient.peer.name.clone(),
             content: content.clone(),

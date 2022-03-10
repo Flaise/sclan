@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 use std::sync::mpsc::{Sender, Receiver};
 use time::macros::format_description;
-use time::OffsetDateTime;
+use time::{OffsetDateTime, UtcOffset};
 use crate::network::{ToNet, FromNet};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -29,6 +29,7 @@ pub struct App {
     pub needs_redraw: bool,
     pub status: StatusState,
     pub last_message_id: u32,
+    pub offset: Option<UtcOffset>,
 }
 
 #[derive(Default)]
@@ -109,13 +110,21 @@ pub struct Message {
     pub message_id: u32,
 }
 
-pub fn now_fmt() -> String {
+/// Must be called before the current process becomes multithreaded or else the `time` crate decides
+/// to become useless on Unix machines. See: https://github.com/time-rs/time/issues/293
+pub fn load_offset(app: &mut App) {
+    app.offset = UtcOffset::current_local_offset().ok();
+}
+
+pub fn now_fmt(app: &mut App) -> String {
     let desc = format_description!(
         "[hour padding:space]:[minute] [month padding:space]/[day padding:space]/[year]"
     );
 
-    match OffsetDateTime::now_local() {
-        Ok(a) => a.format(&desc).unwrap_or("<format error>".to_string()),
-        Err(_) => "<time zone error>".to_string(),
+    if let Some(offset) = app.offset {
+        OffsetDateTime::now_utc().to_offset(offset)
+            .format(&desc).unwrap_or("<format error>".to_string())
+    } else {
+        "<time zone error>".to_string()
     }
 }

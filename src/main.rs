@@ -8,7 +8,6 @@ mod actions;
 
 use std::error::Error;
 use std::io::stdout;
-
 use std::time::Duration;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
@@ -16,7 +15,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use tui::{backend::{Backend, CrosstermBackend}, Terminal};
-use crate::data::{App, InputMode};
+use crate::data::{App, InputMode, load_offset};
 use crate::layout::ui;
 use crate::actions::{input_async, input_terminal};
 
@@ -28,7 +27,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let app = App::default();
+    let mut app = App::default();
+    load_offset(&mut app);
     let res = run_app(&mut terminal, app);
 
     // restore terminal
