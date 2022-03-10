@@ -82,8 +82,6 @@ pub struct LANIOState {
 pub struct Peer {
     pub name: String,
     pub address: IpAddr,
-
-    // TODO: last_seen
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]

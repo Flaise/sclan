@@ -176,15 +176,20 @@ async fn on_command(to_app: &mut Sender<FromNet>, node: &Endpoint,
             let found = peers
                 .iter().find(|r| r.address.ip() == address);
             if let Some(peer) = found {
-                let (conn, incoming_messages) =
-                    node.connect_to(&peer.address).await.unwrap();//?;
-                    ////////////////// TODO
+                match node.connect_to(&peer.address).await {
+                    Ok((conn, incoming_messages)) => {
+                        on_connection(to_app.clone(), connections, conn, incoming_messages);
 
-
-                on_connection(to_app.clone(), connections, conn, incoming_messages);
-
-                let _ = send_message(to_app, connections, true, message_id, address, content).await;
-                return;
+                        let _ = send_message(
+                            to_app, connections, true, message_id, address, content).await;
+                        return;
+                    }
+                    Err(error) => {
+                        if !show_error(to_app, format!("error: {:?}", error)) {
+                            return;
+                        }
+                    }
+                }
             }
 
             if !show_error(to_app, format!("error: no connection to {}", address)) {
