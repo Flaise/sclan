@@ -10,7 +10,7 @@ use tokio::sync::watch::Sender as WSender;
 use qp2p::{Config, Endpoint, ConnectionIncoming, Connection};
 use crate::network::{FromNet, ToNet, show_error};
 
-const PEER_IDLE_TIME: Duration = Duration::from_secs(10);
+const PEER_IDLE_TIME: Duration = Duration::from_secs(18);
 
 struct PeerKnown {
     address: SocketAddr,

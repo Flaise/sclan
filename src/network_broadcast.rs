@@ -14,6 +14,7 @@ use gethostname::gethostname;
 use crate::network::{show_status, show_error, FromNet};
 
 const PORT: u16 = 31331;
+const PING_INTERVAL: Duration = Duration::from_secs(4);
 
 pub async fn task_ping(mut to_app: Sender<FromNet>, wport: WReceiver<Option<u16>>,
         to_p2p: TSender<SocketAddr>) {
@@ -147,7 +148,7 @@ async fn task_ping_out(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>,
             return PingDone::IO(error);
         }
 
-        sleep(Duration::from_secs(4)).await;
+        sleep(PING_INTERVAL).await;
     }
 }
 
