@@ -33,9 +33,9 @@ Go to the [Releases](https://github.com/Flaise/sclan/releases) page on the Githu
 
 The controls are always displayed in the lower left corner.
 
-Build From Source
------------------
-For advanced users or platforms other than Windows.
+All Other Installations (Advanced Users)
+----------------------------------------
+For the time being, my friends using Unix systems will have to build from source. Advanced Windows users can also do this if desired.
 
 Install the Rust toolchain if you haven't already. The easiest way is by following the directions on the [Rustup](https://rustup.rs/) website. Then open a terminal. (On Windows this can be done by pressing the windows key and typing "cmd" and pressing enter.) Use the command:
 
@@ -45,7 +45,7 @@ Then, to run sclan, type
 
     sclan
     
-Alternatively you can use git to clone this repository and from inside the repository, use
+Alternatively you can use git to clone this repository and from inside your cloned copy of the repository, use
 
     cargo run
 
