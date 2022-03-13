@@ -17,30 +17,37 @@ Limitations
 
 * Although the end-to-end encryption prevents your messages from being intercepted by a third party while you already have a connection to the other machine, sclan does not have a way to verify that other machines on the network are who they say they are. Whatever name the other user has picked for their computer is the name that will show up in the network list in sclan. This is one of the reasons why guest networks usually don't allow themselves to be scanned. Please don't use sclan to move an important password to another computer unless you know for sure what's on your network. Also be aware that all data upon arrival will be displayed in plain text, not obscured in any way, making you vulnerable to screen-reading malware and someone looking over your shoulder.
 
+* It won't locate other computers via IPv6 connections. If you're using a router that does not support IPv4 (some newer routers) then sclan won't work yet.
+
 
 Planned Features
 ----------------
 * File transfer.
 * Optional logging so you can find your links and other important messages even after restarting sclan.
+* IPv6 support.
 
 
-Install and Run
----------------
-Windows:
+Install and Run on Windows
+--------------------------
+Go to the [Releases](https://github.com/Flaise/sclan/releases) page on the Github repository, download the executable, and double-click it to run it. Or, for a command line interface, install with cargo (below). It doesn't require any particular installation. Just put it somewhere on your computer and it will run.
 
-Go to the Releases page on the Github repository, download the executable, and double-click it to run it. Or, for a command line interface, install with cargo (below). It doesn't require any particular installation. Just put it somewhere on your computer and it will run.
-    
-All platforms:
+The controls are always displayed in the lower left corner.
 
-Requires the Rust toolchain to already be installed. Open a terminal. (On Windows this can be done by pressing the windows key and typing "cmd" and pressing enter.) Use the command:
+All Other Installations (Advanced Users)
+----------------------------------------
+For the time being, my friends using Unix systems will have to build from source. Advanced Windows users can also do this if desired.
+
+Install the Rust toolchain if you haven't already. The easiest way is by following the directions on the [Rustup](https://rustup.rs/) website. Then open a terminal. (On Windows this can be done by pressing the windows key and typing "cmd" and pressing enter.) Use the command:
 
     cargo install sclan
     
 Then, to run sclan, type
 
     sclan
+    
+Alternatively you can use git to clone this repository and from inside your cloned copy of the repository, use
 
-The controls are always displayed in the lower left corner.
+    cargo run
 
 
 License
