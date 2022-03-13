@@ -82,7 +82,7 @@ pub fn input_terminal(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Er
         }
         (_, KeyCode::Char('v'), KeyModifiers::ALT) => {
             paste(app)?;
-            
+
             app.input_mode = InputMode::Editing;
             app.message_highlight = None;
         }
@@ -155,6 +155,9 @@ pub fn input_terminal(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Er
             }
         }
 
+        (InputMode::Editing, KeyCode::Enter, KeyModifiers::SHIFT) => {
+            app.input.push('\n');
+        }
         (InputMode::Editing, KeyCode::Enter, _) => {
             if !app.recipient.valid {
                 app.input_mode = InputMode::Normal;

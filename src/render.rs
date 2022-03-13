@@ -118,6 +118,14 @@ pub fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
         lines.push(Spans::default());
     }
 
+    if !recipient_valid {
+        lines.push(Spans::default());
+    } else if input_mode == InputMode::Editing {
+        lines.push(Spans::from(vec![bold("[Sh+Ent]"), plain("-new line")]));
+    } else {
+        lines.push(Spans::default());
+    }
+
     if input_mode == InputMode::Normal {
         if output_selected {
             lines.push(Spans::from(vec![bold("   [Esc]"), plain("-deselect")]));

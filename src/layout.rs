@@ -29,7 +29,7 @@ fn calc_layout(base: Rect) -> Cells {
         .constraints([
             Constraint::Length(7),
             Constraint::Min(3),
-            Constraint::Length(8),
+            Constraint::Length(9),
         ])
         .split(horiz[1]);
 
