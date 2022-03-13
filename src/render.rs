@@ -49,7 +49,7 @@ pub fn ui_scrolling_list(area: Rect, title: &str, selection: &str, options: &[St
     let max_options = max(1, area.height.saturating_sub(2) as usize);
 
     let mut lines = vec![
-        Spans::from(title.to_string()),
+        Spans::from(faded(title.to_string())),
     ];
 
     if let Some(index) = options.iter().position(|a| a == selection) {
@@ -187,20 +187,19 @@ pub fn render_input<B: Backend>(f: &mut Frame<B>, app: &App, cell_input: Rect) {
 pub fn ui_info<'a>(app: &'a App) -> Paragraph<'a> {
     Paragraph::new(vec![
         Spans::from(vec![
-            bold("SCLAN"),
-            plain(" "),
+            bold("SCLAN "),
             plain(env!("CARGO_PKG_VERSION")),
         ]),
         Spans::default(),
 
-        Spans::from("computer name:"),
+        Spans::from(faded("computer name:")),
         if app.lan.local_name.len() > 0 {
             Spans::from(bold(&app.lan.local_name))
         } else {
             Spans::from(faded("(pending...)"))
         },
 
-        Spans::from("internal address:"),
+        Spans::from(faded("internal address:")),
         if app.lan.local_addr.len() > 0 {
             Spans::from(bold(&app.lan.local_addr))
         } else {
