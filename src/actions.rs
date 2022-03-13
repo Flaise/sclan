@@ -82,6 +82,9 @@ pub fn input_terminal(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Er
         }
         (_, KeyCode::Char('v'), KeyModifiers::ALT) => {
             paste(app)?;
+            
+            app.input_mode = InputMode::Editing;
+            app.message_highlight = None;
         }
         (_, KeyCode::Tab, KeyModifiers::SHIFT) => {
             // NOTE: Shift+Tab doesn't work on the Windows Command Prompt
