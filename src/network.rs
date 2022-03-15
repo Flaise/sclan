@@ -39,32 +39,26 @@ pub enum ToNet {
 }
 
 pub fn message_to_net(app: &mut App, message: ToNet) -> Result<(), ()> {
-    if let Some(ref state) = app.lan_io {
-        if let Err(_) = state.to_lan.send(message) {
-            app.lan_io = None;
-            return Err(());
-        }
-        return Ok(());
+    let state = app.lan_io.as_ref().ok_or(())?;
+    if let Err(_) = state.to_lan.send(message) {
+        app.lan_io = None;
+        return Err(());
     }
-    Err(())
+    Ok(())
 }
 
 pub fn message_from_net(app: &mut App) -> Option<FromNet> {
     if app.lan_io.is_none() {
         start_network(app);
     }
-    if let Some(ref state) = app.lan_io {
-        match state.from_lan.try_recv() {
-            Ok(message) => Some(message),
-            Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => {
-                app.lan_io = None;
-                None
-            }
+    let state = app.lan_io.as_ref()?; // None if thread couldn't start.
+    match state.from_lan.try_recv() {
+        Ok(message) => Some(message),
+        Err(TryRecvError::Empty) => None,
+        Err(TryRecvError::Disconnected) => {
+            app.lan_io = None;
+            None
         }
-    } else {
-        // This happens if the thread couldn't start.
-        None
     }
 }
 
