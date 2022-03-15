@@ -136,67 +136,52 @@ fn pull_commands(from_app: Receiver<ToNet>) -> TReceiver<ToNet> {
     commands
 }
 
-/// true = message arrived
-async fn send_message(to_app: &mut Sender<FromNet>, connections: &mut Vec<Connection>,
-        send_error: bool, message_id: u32, address: IpAddr, content: String) -> bool {
+async fn send_message(connections: &mut Vec<Connection>,
+        address: IpAddr, content: String) -> Result<(), String> {
 
     let found = connections
         .iter().find(|r| r.remote_address().ip() == address);
-    if let Some(dest) = found {
-        if let Err(error) = dest.send(content.into()).await {
-            if send_error {
-                if !show_error(to_app, format!("error: {:?}", error)) {
-                    return true;
-                }
-                if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
-                    return true;
-                }
-            }
-            false
-        } else {
-            if let Err(_) = to_app.send(FromNet::SendArrived(message_id)) {
-                return true;
-            }
-            true
-        }
-    } else {
-        false
-    }
+    let dest = found.ok_or(format!("no connection to {}", address))?;
+    dest.send(content.into()).await
+        .map_err(|a| a.to_string())
 }
+
+async fn send_twice(to_app: &mut Sender<FromNet>, node: &Endpoint,
+        connections: &mut Vec<Connection>, peers: &[PeerKnown],
+        address: IpAddr, content: String) -> Result<(), String> {
+    if let Ok(_) = send_message(connections, address, content.clone()).await {
+        return Ok(());
+    }
+    
+    let found = peers.iter().find(|r| r.address.ip() == address);
+    let peer = found.ok_or(format!("no connection to {}", address))?;
+    
+    let (conn, incoming_messages) = node.connect_to(&peer.address).await
+        .map_err(|a| a.to_string())?;
+    on_connection(to_app.clone(), connections, conn, incoming_messages);
+    send_message( connections, address, content.clone()).await
+        .map_err(|a| a.to_string())
+}
+
 
 async fn on_command(to_app: &mut Sender<FromNet>, node: &Endpoint,
         connections: &mut Vec<Connection>, peers: &[PeerKnown], command: ToNet) {
     match command {
         ToNet::Send {message_id, address, content} => {
-            if send_message(to_app, connections, false, message_id, address,
-                    content.clone()).await {
-                return;
-            }
-
-            let found = peers
-                .iter().find(|r| r.address.ip() == address);
-            if let Some(peer) = found {
-                match node.connect_to(&peer.address).await {
-                    Ok((conn, incoming_messages)) => {
-                        on_connection(to_app.clone(), connections, conn, incoming_messages);
-
-                        let _ = send_message(
-                            to_app, connections, true, message_id, address, content).await;
+            match send_twice(to_app, node, connections, peers, address, content).await {
+                Ok(()) => {
+                    if let Err(_) = to_app.send(FromNet::SendArrived(message_id)) {
                         return;
                     }
-                    Err(error) => {
-                        if !show_error(to_app, format!("error: {:?}", error)) {
-                            return;
-                        }
+                }
+                Err(error) => {
+                    if !show_error(to_app, format!("error: {:?}", error)) {
+                        return;
+                    }
+                    if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
+                        return;
                     }
                 }
-            }
-
-            if !show_error(to_app, format!("error: no connection to {}", address)) {
-                return;
-            }
-            if let Err(_) = to_app.send(FromNet::SendFailed(message_id)) {
-                return;
             }
         }
     }
