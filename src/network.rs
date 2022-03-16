@@ -28,6 +28,7 @@ pub enum FromNet {
         address: IpAddr,
     },
     Peerbgone(IpAddr),
+    Logging(bool),
 }
 
 pub enum ToNet {
@@ -35,7 +36,8 @@ pub enum ToNet {
         message_id: u32,
         address: IpAddr,
         content: String,
-    }
+    },
+    LogStart,
 }
 
 pub fn message_to_net(app: &mut App, message: ToNet) -> Result<(), ()> {

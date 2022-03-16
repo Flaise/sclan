@@ -58,6 +58,9 @@ pub fn input_async(app: &mut App) {
                 update_message(app, message_id, MessageType::Sent);
             }
             FromNet::ShowMessage {source, content} => show_message(app, source, content),
+            FromNet::Logging(on) => {
+                // TODO
+            }
         }
         app.needs_redraw = true;
     }

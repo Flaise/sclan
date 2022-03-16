@@ -5,6 +5,7 @@ mod network_p2p;
 mod render;
 mod layout;
 mod actions;
+mod log;
 
 use std::error::Error;
 use std::io::stdout;

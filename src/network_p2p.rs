@@ -109,10 +109,8 @@ async fn task_receive_one(
             return;
         };
 
-        if let Err(_) = to_app.send(FromNet::ShowMessage {
-            source,
-            content: String::from_utf8_lossy(&bytes).into_owned(),
-        }) {
+        let content = String::from_utf8_lossy(&bytes).into_owned();
+        if let Err(_) = to_app.send(FromNet::ShowMessage {source, content}) {
             return;
         }
     }
@@ -163,7 +161,6 @@ async fn send_twice(to_app: &mut Sender<FromNet>, node: &Endpoint,
         .map_err(|a| a.to_string())
 }
 
-
 async fn on_command(to_app: &mut Sender<FromNet>, node: &Endpoint,
         connections: &mut Vec<Connection>, peers: &[PeerKnown], command: ToNet) {
     match command {
@@ -183,6 +180,9 @@ async fn on_command(to_app: &mut Sender<FromNet>, node: &Endpoint,
                     }
                 }
             }
+        }
+        ToNet::LogStart => {
+            
         }
     }
 }

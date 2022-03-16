@@ -17,7 +17,7 @@ gethostname = "0.2.2"
 clipboard = "0.5.0"
 time = { version = "0.3.7", features = ["formatting", "macros", "local-offset"] }
 textwrap = { version = "0.15", default-features = false, features = ["unicode-width"] }
-tokio = { version = "1.17.0", features = ["rt", "time", "net", "macros"] }
+tokio = { version = "1.17.0", features = ["rt", "time", "net", "macros", "fs", "io-util"] }
 
 # 2.32MB straight up to 7.51MB with one dependency...
 qp2p = { version = "0.28.5", default-features = false }
