@@ -10,6 +10,8 @@ It's easy to install, uses very little memory and CPU power, and runs on just ab
 
 Press up and down to select a message in order to copy it to the system clipboard for a convenient way to move the text to a different program on your computer. Copy and paste in sclan are [Alt+C] and [Alt+V] because pressing [Ctrl+C] in a terminal is the standard way to end a program on all platforms.
 
+Whenever there's a sclan.log file in the current working directory, incoming and outgoing messages will be logged to that file. Press [L] to create the file and start logging if there isn't one.
+
 
 Limitations
 -----------
