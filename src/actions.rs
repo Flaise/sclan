@@ -173,8 +173,6 @@ pub fn input_terminal(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Er
             if !app.recipient.valid {
                 app.input_mode = InputMode::Normal;
             } else if app.input.trim().len() > 0 {
-                set_status(app, false, "");
-
                 let content = take(&mut app.input);
                 send(app, content);
             } else {
@@ -251,6 +249,10 @@ fn next_message_id(app: &mut App) -> u32 {
 
 fn send(app: &mut App, content: String) {
     if app.recipient.valid {
+        if app.status.is_error {
+            set_status(app, false, "");
+        }
+
         let message_id = next_message_id(app);
         let timestamp = now_fmt(app);
 
