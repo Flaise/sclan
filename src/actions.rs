@@ -5,7 +5,7 @@ use std::net::IpAddr;
 use std::cmp::min;
 use crossterm::event::{Event, KeyCode, KeyModifiers, read, poll};
 use clipboard::{ClipboardProvider, ClipboardContext};
-use crate::data::{App, InputMode, now_fmt, Message, MessageType, set_status, Peer};
+use crate::data::{App, InputMode, now_fmt, Message, MessageType, set_status, Peer, LogState};
 use crate::network::{ToNet, message_to_net, message_from_net, FromNet};
 
 pub fn input_async(app: &mut App) {
@@ -59,7 +59,11 @@ pub fn input_async(app: &mut App) {
             }
             FromNet::ShowMessage {source, content} => show_message(app, source, content),
             FromNet::Logging(on) => {
-                // TODO
+                if on {
+                    app.logging = LogState::Active;
+                } else {
+                    app.logging = LogState::Inactive;
+                }
             }
         }
         app.needs_redraw = true;
@@ -80,6 +84,10 @@ pub fn input_terminal(app: &mut App, timeout: Duration) -> Result<(), Box<dyn Er
     };
 
     match (app.input_mode, key.code, key.modifiers) {
+        (InputMode::Normal, KeyCode::Char('l'), _) => {
+            start_logging(app);
+        }
+        
         (InputMode::Normal, KeyCode::Char('c'), KeyModifiers::ALT) => {
             copy(app)?;
         }
@@ -260,6 +268,7 @@ fn send(app: &mut App, content: String) {
             content,
         }) {
             update_message(app, message_id, MessageType::SendFailed);
+            show_error(app, "async thread not started".into());
         }
     }
 }
@@ -278,4 +287,18 @@ fn copy(app: &mut App) -> Result<(), Box<dyn Error>> {
         ctx.set_contents(content)?;
     }
     Ok(())
+}
+
+fn start_logging(app: &mut App) {
+    match app.logging {
+        LogState::Pending | LogState::Active => {}
+        LogState::Inactive => {
+            if let Err(_) = message_to_net(app, ToNet::LogStart) {
+                show_error(app, "async thread not started".into());
+                return;
+            }
+            
+            app.logging = LogState::Pending;
+        }
+    }
 }

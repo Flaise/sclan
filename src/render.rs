@@ -9,7 +9,7 @@ use tui::layout::{Alignment, Rect};
 use unicode_width::UnicodeWidthStr;
 use textwrap::wrap;
 use crate::App;
-use crate::data::{InputMode, MessageType, Message};
+use crate::data::{InputMode, MessageType, Message, LogState};
 
 fn plain<'a, T>(message: T) -> Span<'a>
 where T: Into<Cow<'a, str>> {
@@ -88,10 +88,20 @@ pub fn ui_scrolling_list(area: Rect, title: &str, selection: &str, options: &[St
 
 pub fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
                        text_entered: bool, output_displayed: bool,
-                       output_selected: bool) -> Paragraph<'static> {
+                       output_selected: bool, logging: LogState) -> Paragraph<'static> {
     let mut lines = vec![];
 
     lines.push(Spans::from("__________________"));
+
+    if logging == LogState::Pending {
+        lines.push(Spans::from("   Log starting..."));
+    } else if logging == LogState::Active {
+        lines.push(Spans::from(" Log to: sclan.log"));
+    } else if input_mode == InputMode::Normal && logging == LogState::Inactive {
+        lines.push(Spans::from(vec![bold("     [L]"), plain("-logging")]));
+    } else {
+        lines.push(Spans::default());
+    }
 
     if input_mode == InputMode::Normal && output_displayed {
         lines.push(Spans::from(vec![bold(" [↑] [↓]"), plain("-message")]));

@@ -4,21 +4,24 @@ use std::sync::mpsc::{Sender, Receiver};
 use tokio::{spawn, select};
 use tokio::time::{sleep, interval, MissedTickBehavior, Instant};
 use tokio::task::spawn_blocking;
-use tokio::sync::mpsc::{channel, Receiver as TReceiver};
+use tokio::sync::mpsc::{channel, Receiver as TReceiver, Sender as TSender};
 use tokio::runtime::Handle;
 use tokio::sync::watch::Sender as WSender;
 use qp2p::{Config, Endpoint, ConnectionIncoming, Connection};
 use crate::network::{FromNet, ToNet, show_error};
+use crate::log::ToLog;
 
 const PEER_IDLE_TIME: Duration = Duration::from_secs(18);
 
 struct PeerKnown {
+    name: String,
     address: SocketAddr,
     last_seen: Instant,
 }
 
 pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
-        send_port: WSender<Option<u16>>, mut receive_peer: TReceiver<SocketAddr>) {
+        mut to_log: TSender<ToLog>,
+        send_port: WSender<Option<u16>>, mut receive_peer: TReceiver<(SocketAddr, String)>) {
 
     let mut peers_known = Vec::<PeerKnown>::new();
     let mut commands = pull_commands(from_app);
@@ -72,17 +75,18 @@ pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
                         return;
                     };
 
-                    on_command(&mut to_app, &node, &mut connections, &peers_known, command).await;
+                    on_command(&mut to_app, &mut to_log, &node, &mut connections, &peers_known,
+                        command).await;
                 }
 
                 peer = receive_peer.recv() => {
-                    let peer = if let Some(a) = peer {
+                    let (address, name) = if let Some(a) = peer {
                         a
                     } else {
                         return;
                     };
 
-                    on_peer(&mut peers_known, peer);
+                    on_peer(&mut peers_known, address, name);
                 }
 
                 arrival = incoming_conns.next() => {
@@ -93,15 +97,16 @@ pub async fn task_p2p(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet>,
                         continue 'restart;
                     };
 
-                    on_connection(to_app.clone(), &mut connections, connection, incoming_messages);
+                    on_connection(to_app.clone(), to_log.clone(),
+                        &mut connections, &peers_known, connection, incoming_messages);
                 }
             }
         }
     }
 }
 
-async fn task_receive_one(
-        to_app: Sender<FromNet>, source: IpAddr, mut incoming: ConnectionIncoming) {
+async fn task_receive_one(to_app: Sender<FromNet>, to_log: TSender<ToLog>,
+        source: IpAddr, name: String, mut incoming: ConnectionIncoming) {
     while let Ok(obytes) = incoming.next().await {
         let bytes = if let Some(a) = obytes {
             a
@@ -110,6 +115,12 @@ async fn task_receive_one(
         };
 
         let content = String::from_utf8_lossy(&bytes).into_owned();
+        
+        if let Err(_) = to_log.send(ToLog::LogMessage(
+            format!("\nfrom [{}] [{}] {}", name, source.to_string(), content.clone())
+        )).await {
+            return;
+        }
         if let Err(_) = to_app.send(FromNet::ShowMessage {source, content}) {
             return;
         }
@@ -144,30 +155,40 @@ async fn send_message(connections: &mut Vec<Connection>,
         .map_err(|a| a.to_string())
 }
 
-async fn send_twice(to_app: &mut Sender<FromNet>, node: &Endpoint,
-        connections: &mut Vec<Connection>, peers: &[PeerKnown],
-        address: IpAddr, content: String) -> Result<(), String> {
-    if let Ok(_) = send_message(connections, address, content.clone()).await {
-        return Ok(());
-    }
-    
+/// Returns Result<name of peer, description of failure>
+async fn send_twice(to_app: &mut Sender<FromNet>, to_log: &mut TSender<ToLog>,
+        node: &Endpoint, connections: &mut Vec<Connection>, peers: &[PeerKnown],
+        address: IpAddr, content: String) -> Result<String, String> {
     let found = peers.iter().find(|r| r.address.ip() == address);
     let peer = found.ok_or(format!("no connection to {}", address))?;
     
+    if let Ok(_) = send_message(connections, address, content.clone()).await {
+        return Ok(peer.name.clone());
+    }
+    
     let (conn, incoming_messages) = node.connect_to(&peer.address).await
         .map_err(|a| a.to_string())?;
-    on_connection(to_app.clone(), connections, conn, incoming_messages);
-    send_message( connections, address, content.clone()).await
-        .map_err(|a| a.to_string())
+    on_connection(to_app.clone(), to_log.clone(), connections, peers, conn, incoming_messages);
+    
+    send_message(connections, address, content.clone()).await
+        .map_err(|a| a.to_string())?;
+        
+    Ok(peer.name.clone())
 }
 
-async fn on_command(to_app: &mut Sender<FromNet>, node: &Endpoint,
+async fn on_command(to_app: &mut Sender<FromNet>, to_log: &mut TSender<ToLog>, node: &Endpoint,
         connections: &mut Vec<Connection>, peers: &[PeerKnown], command: ToNet) {
     match command {
         ToNet::Send {message_id, address, content} => {
-            match send_twice(to_app, node, connections, peers, address, content).await {
-                Ok(()) => {
+            match send_twice(to_app, to_log,
+                    node, connections, peers, address, content.clone()).await {
+                Ok(name) => {
                     if let Err(_) = to_app.send(FromNet::SendArrived(message_id)) {
+                        return;
+                    }
+                    if let Err(_) = to_log.send(ToLog::LogMessage(
+                        format!("\nto [{}] [{}] {}", name, address.to_string(), content)
+                    )).await {
                         return;
                     }
                 }
@@ -182,7 +203,9 @@ async fn on_command(to_app: &mut Sender<FromNet>, node: &Endpoint,
             }
         }
         ToNet::LogStart => {
-            
+            if let Err(_) = to_log.send(ToLog::LogStart).await {
+                return;
+            }
         }
     }
 }
@@ -198,21 +221,26 @@ fn cull_peers(to_app: &mut Sender<FromNet>, peers_known: &mut Vec<PeerKnown>, no
     });
 }
 
-fn on_peer(peers_known: &mut Vec<PeerKnown>, address: SocketAddr) {
+fn on_peer(peers_known: &mut Vec<PeerKnown>, address: SocketAddr, name: String) {
     let ip = address.ip();
 
     if let Some(index) = peers_known
             .iter().position(|r| r.address.ip() == ip) {
-        peers_known[index].last_seen = Instant::now();
+        let peer = &mut peers_known[index];
+        peer.name.clear();
+        peer.name.push_str(&name);
+        peer.last_seen = Instant::now();
     } else {
         peers_known.push(PeerKnown {
+            name,
             address,
             last_seen: Instant::now(),
         });
     }
 }
 
-fn on_connection(to_app: Sender<FromNet>, connections: &mut Vec<Connection>,
+fn on_connection(to_app: Sender<FromNet>, to_log: TSender<ToLog>,
+        connections: &mut Vec<Connection>, peers: &[PeerKnown],
         connection: Connection, incoming_messages: ConnectionIncoming) {
     let ip = connection.remote_address().ip();
 
@@ -225,6 +253,9 @@ fn on_connection(to_app: Sender<FromNet>, connections: &mut Vec<Connection>,
     } else {
         connections.push(connection);
     }
+    
+    let found = peers.iter().find(|r| r.address.ip() == ip);
+    let name = found.map(|a| a.name.clone()).unwrap_or(ip.to_string());
 
-    spawn(task_receive_one(to_app, ip, incoming_messages));
+    spawn(task_receive_one(to_app, to_log, ip, name, incoming_messages));
 }

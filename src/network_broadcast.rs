@@ -17,7 +17,7 @@ const PORT: u16 = 31331;
 const PING_INTERVAL: Duration = Duration::from_secs(4);
 
 pub async fn task_ping(mut to_app: Sender<FromNet>, wport: WReceiver<Option<u16>>,
-        to_p2p: TSender<SocketAddr>) {
+        to_p2p: TSender<(SocketAddr, String)>) {
     loop {
         let socket = match make_socket().await {
             Err(error) => {
@@ -73,7 +73,7 @@ enum PingDone {
 }
 
 async fn task_ping_in(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>,
-        to_p2p: TSender<SocketAddr>) -> PingDone {
+        to_p2p: TSender<(SocketAddr, String)>) -> PingDone {
     let to_app = &mut to_app;
     let mut buf = [0; 2048];
     loop {
@@ -106,7 +106,7 @@ async fn task_ping_in(socket: Arc<UdpSocket>, mut to_app: Sender<FromNet>,
         }
 
         let peer_addr = SocketAddr::from((ip, port));
-        if let Err(_) = to_p2p.send(peer_addr).await {
+        if let Err(_) = to_p2p.send((peer_addr, name.to_string())).await {
             return PingDone::Exiting;
         }
     }

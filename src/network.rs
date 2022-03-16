@@ -11,6 +11,7 @@ use tokio::sync::mpsc::channel as tchannel;
 use crate::data::{App, LANIOState};
 use crate::network_broadcast::task_ping;
 use crate::network_p2p::task_p2p;
+use crate::log::task_log;
 
 pub enum FromNet {
     ShowLocalName(String),
@@ -122,12 +123,14 @@ async fn run_network_async(from_app: Receiver<ToNet>, mut to_app: Sender<FromNet
 
     let (send_peer, receive_peer) = tchannel(1);
     let (send_port, watch_port) = wchannel(None);
+    let (send_log, receive_log) = tchannel(1);
 
     let a = spawn(task_local_name(to_app.clone()));
     let b = spawn(task_ping(to_app.clone(), watch_port, send_peer));
-    let c = spawn(task_p2p(from_app, to_app.clone(), send_port, receive_peer));
+    let c = spawn(task_p2p(from_app, to_app.clone(), send_log, send_port, receive_peer));
+    let d = spawn(task_log(to_app, receive_log));
 
-    for r in [a, b, c] {
+    for r in [a, b, c, d] {
         r.await.expect("task panicked");
     }
 }

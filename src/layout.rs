@@ -29,7 +29,7 @@ fn calc_layout(base: Rect) -> Cells {
         .constraints([
             Constraint::Length(7),
             Constraint::Min(3),
-            Constraint::Length(9),
+            Constraint::Length(10),
         ])
         .split(horiz[1]);
 
@@ -67,7 +67,7 @@ pub fn ui<B: Backend>(frame: &mut Frame<B>, app: &App) {
 
     frame.render_widget(ui_instructions(
         app.input_mode, app.recipient.valid, app.input.trim().len() > 0, app.messages.len() > 0,
-        app.message_highlight.is_some()
+        app.message_highlight.is_some(), app.logging
     ), cell_instructions);
 
     frame.render_widget(ui_status(app), cell_status);

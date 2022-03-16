@@ -30,6 +30,20 @@ pub struct App {
     pub status: StatusState,
     pub last_message_id: u32,
     pub offset: Option<UtcOffset>,
+    pub logging: LogState,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum LogState {
+    Active,
+    Inactive,
+    Pending,
+}
+
+impl Default for LogState {
+    fn default() -> Self {
+        LogState::Inactive
+    }
 }
 
 #[derive(Default)]
