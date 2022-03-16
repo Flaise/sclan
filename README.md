@@ -23,13 +23,12 @@ Limitations
 Planned Features
 ----------------
 * File transfer.
-* Optional logging so you can find your links and other important messages even after restarting sclan.
 * IPv6 support.
 
 
 Install and Run on Windows
 --------------------------
-Go to the [Releases](https://github.com/Flaise/sclan/releases) page on the Github repository, download the executable, and double-click it to run it. Or, for a command line interface, install with cargo (below). It doesn't require any particular installation. Just put it somewhere on your computer and it will run.
+Go to the [Releases](https://github.com/Flaise/sclan/releases) page on the Github repository, download the executable, and double-click it to run it. It doesn't require any particular installation. Just put it somewhere on your computer and it will run. Or, to install and run from the command line, install with cargo (below).
 
 The controls are always displayed in the lower left corner.
 
