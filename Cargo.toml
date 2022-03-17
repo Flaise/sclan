@@ -8,6 +8,7 @@ categories = ["network-programming", "command-line-utilities"]
 repository = "https://github.com/Flaise/sclan"
 readme = "README.md"
 description = "Simple Communication over Local Area Network"
+exclude = ["screenshots/"]
 
 [dependencies]
 crossterm = "0.22"
