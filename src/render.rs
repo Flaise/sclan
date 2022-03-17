@@ -96,7 +96,7 @@ pub fn ui_instructions(input_mode: InputMode, recipient_valid: bool,
     if logging == LogState::Pending {
         lines.push(Spans::from("   Log starting..."));
     } else if logging == LogState::Active {
-        lines.push(Spans::from(" Log to: sclan.log"));
+        lines.push(Spans::default());
     } else if input_mode == InputMode::Normal && logging == LogState::Inactive {
         lines.push(Spans::from(vec![bold("     [L]"), plain("-logging")]));
     } else {
@@ -247,6 +247,9 @@ fn message_heading(message: &Message) -> Spans<'static> {
         MessageType::Error => {
             heading.push(bold("x error "));
         }
+        MessageType::Note => {
+            return Spans::from(heading);
+        }
     }
 
     heading.push(bold(message.name.clone()));
@@ -265,6 +268,7 @@ fn message_heading(message: &Message) -> Spans<'static> {
         MessageType::SendFailed => Color::Red,
         MessageType::Received => Color::LightCyan,
         MessageType::Error => Color::Red,
+        MessageType::Note => unreachable!(),
     };
 
     for span in &mut heading {

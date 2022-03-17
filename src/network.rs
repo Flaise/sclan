@@ -29,7 +29,8 @@ pub enum FromNet {
         address: IpAddr,
     },
     Peerbgone(IpAddr),
-    Logging(bool),
+    LogStarted(String),
+    LogStopped,
 }
 
 pub enum ToNet {

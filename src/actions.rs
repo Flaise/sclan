@@ -58,12 +58,21 @@ pub fn input_async(app: &mut App) {
                 update_message(app, message_id, MessageType::Sent);
             }
             FromNet::ShowMessage {source, content} => show_message(app, source, content),
-            FromNet::Logging(on) => {
-                if on {
+            FromNet::LogStarted(path) => {
+                if app.logging != LogState::Active {
+                    let timestamp = now_fmt(app);
+                    app.messages.push(Message {
+                        timestamp,
+                        direction: MessageType::Note,
+                        name: "".into(),
+                        content: format!("Logging to {}", path),
+                        message_id: 0,
+                    });
                     app.logging = LogState::Active;
-                } else {
-                    app.logging = LogState::Inactive;
                 }
+            }
+            FromNet::LogStopped => {
+                app.logging = LogState::Inactive;
             }
         }
         app.needs_redraw = true;
